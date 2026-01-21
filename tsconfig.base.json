@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "declaration": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@simracing/core": ["packages/core/src/index.ts"],
+      "@simracing/adapters-iracing": ["packages/adapters/iracing/src/index.ts"],
+      "@simracing/api-client": ["packages/api-client/src/index.ts"],
+      "@simracing/speech": ["packages/speech/src/index.ts"],
+      "@simracing/config": ["packages/config/src/index.ts"],
+      "@simracing/diagnostics": ["packages/diagnostics/src/index.ts"]
+    }
+  }
+}

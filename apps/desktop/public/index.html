@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SimRacing Coach Companion</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>SimRacing Coach Companion</h1>
+      <div class="controls">
+        <button id="mute">Mute</button>
+        <button id="unmute">Unmute</button>
+        <button id="focus">Focus Mode</button>
+        <button id="repeat">Repeat</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel">
+        <h2>Dashboard</h2>
+        <div class="grid">
+          <div>
+            <span>iRacing</span>
+            <strong id="iracing-status">-</strong>
+          </div>
+          <div>
+            <span>API</span>
+            <strong id="api-status">-</strong>
+          </div>
+          <div>
+            <span>FPS</span>
+            <strong id="fps">-</strong>
+          </div>
+          <div>
+            <span>Última telemetría</span>
+            <strong id="last-frame">-</strong>
+          </div>
+        </div>
+        <div>
+          <h3>Últimos mensajes</h3>
+          <ul id="messages"></ul>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Settings</h2>
+        <form id="settings-form">
+          <label>
+            API URL
+            <input type="text" id="api-url" />
+          </label>
+          <label>
+            API Token
+            <input type="text" id="api-token" />
+          </label>
+          <label>
+            Voz (nombre)
+            <input type="text" id="voice-name" />
+          </label>
+          <label>
+            Volumen
+            <input type="number" id="voice-volume" min="0" max="100" />
+          </label>
+          <label>
+            Velocidad
+            <input type="number" id="voice-rate" min="-10" max="10" />
+          </label>
+          <div class="button-row">
+            <button type="button" id="test-voice">Test voz</button>
+            <button type="submit">Guardar</button>
+          </div>
+        </form>
+
+        <div class="filters">
+          <h3>Filtros</h3>
+          <label><input type="checkbox" id="filter-traffic" /> Traffic</label>
+          <label><input type="checkbox" id="filter-flags" /> Flags</label>
+          <label><input type="checkbox" id="filter-engine" /> Engine</label>
+          <label><input type="checkbox" id="filter-coaching" /> Coaching</label>
+        </div>
+
+        <div class="hotkeys">
+          <h3>Hotkeys</h3>
+          <label>
+            Mute toggle
+            <input type="text" id="hotkey-mute" />
+          </label>
+          <label>
+            Repeat last
+            <input type="text" id="hotkey-repeat" />
+          </label>
+          <label>
+            Focus mode
+            <input type="text" id="hotkey-focus" />
+          </label>
+        </div>
+
+        <div class="notes">
+          <h3>Config</h3>
+          <p id="config-path"></p>
+        </div>
+      </section>
+    </main>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
