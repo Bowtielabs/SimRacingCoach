@@ -1,5 +1,15 @@
 {
   "name": "sima-racing-coach",
   "private": true,
-  "packageManager": "pnpm@9.0.0"
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "dev": "concurrently -k -n service,desktop -c green,blue \"pnpm --filter @simracing/service dev\" \"pnpm --filter @simracing/desktop dev\"",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "format": "pnpm -r format"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.5.4"
+  }
 }

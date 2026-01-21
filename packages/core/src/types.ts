@@ -1,38 +1,41 @@
-export type Severity = "CRITICAL" | "WARNING" | "INFO" | "COACH";
+export type SimName = 'iracing';
 
-export type Category =
-  | "TRAFFIC"
-  | "FLAGS"
-  | "ENGINE"
-  | "TEMPS"
-  | "PIT"
-  | "SYSTEM"
-  | "COACHING";
+export type Category = 'TRAFFIC' | 'FLAGS' | 'ENGINE' | 'COACHING' | 'SYSTEM';
+
+export type Severity = 'INFO' | 'WARNING' | 'CRITICAL';
+
+export type Priority = 1 | 2 | 3 | 4 | 5;
 
 export interface TelemetryFrame {
   t: number;
-  sim: "iracing";
-  sessionId: string;
-
-  player: { carIdx: number };
-
-  traffic?: { carLeftRight?: number };
-  flags?: { sessionFlags?: number };
-
-  powertrain?: {
+  sim: SimName;
+  sessionId?: string;
+  player: {
+    carIdx?: number;
+  };
+  traffic: {
+    carLeftRight?: number;
+  };
+  flags: {
+    sessionFlags?: number;
+  };
+  powertrain: {
     speedKph?: number;
     rpm?: number;
     gear?: number;
     throttle?: number;
     brake?: number;
   };
-
-  temps?: {
+  temps: {
     waterC?: number;
     oilC?: number;
-    tyreTempC?: { fl?: number; fr?: number; rl?: number; rr?: number };
-    brakeTempC?: { fl?: number; fr?: number; rl?: number; rr?: number };
+    tyreC?: number[];
+    brakeC?: number[];
   };
+  fuel?: {
+    level?: number;
+  };
+  engineWarnings?: number;
 }
 
 export interface CapabilityMap {
@@ -40,6 +43,8 @@ export interface CapabilityMap {
   hasSessionFlags: boolean;
   hasWaterTemp: boolean;
   hasOilTemp: boolean;
+  hasFuelLevel: boolean;
+  hasEngineWarnings: boolean;
   hasTyreTemps: boolean;
   hasBrakeTemps: boolean;
 }
@@ -49,7 +54,41 @@ export interface LocalEvent {
   t: number;
   category: Category;
   severity: Severity;
-  priority: number;
+  priority: Priority;
   cooldownMs: number;
   text: string;
+  source?: 'local' | 'remote';
+  metadata?: Record<string, unknown>;
+}
+
+export interface ApiMessage extends LocalEvent {
+  sessionId?: string;
+}
+
+export interface Recommendation extends LocalEvent {
+  id: string;
+  source: 'remote';
+}
+
+export interface TemperatureThresholds {
+  warning: number;
+  critical: number;
+}
+
+export interface LocalEventConfig {
+  waterTemp?: TemperatureThresholds;
+  oilTemp?: TemperatureThresholds;
+}
+
+export interface TrafficState {
+  carLeftRight?: number;
+}
+
+export interface RouterEvent {
+  event: LocalEvent;
+  dedupeKey: string;
+}
+
+export interface RouterOptions {
+  focusMode: boolean;
 }
