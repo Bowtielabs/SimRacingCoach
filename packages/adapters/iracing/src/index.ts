@@ -40,8 +40,23 @@ export class IracingAdapter extends EventEmitter {
   async connect() {
     const irsdkModule: any = await import('irsdk-node');
     const irsdk = irsdkModule.default ?? irsdkModule;
+    const createClient = () => {
+      if (typeof irsdk === 'function') {
+        return irsdk();
+      }
+      if (typeof irsdk.init === 'function') {
+        return irsdk.init();
+      }
+      if (typeof irsdk.Iracing === 'function') {
+        return new irsdk.Iracing();
+      }
+      if (typeof irsdk.createClient === 'function') {
+        return irsdk.createClient();
+      }
+      throw new Error('irsdk-node did not expose a compatible client factory.');
+    };
 
-    this.client = typeof irsdk.init === 'function' ? irsdk.init() : new irsdk.Iracing();
+    this.client = createClient();
 
     this.registerHandler('Connected', () => this.emit('connected'));
     this.registerHandler('Disconnected', () => this.emit('disconnected'));
