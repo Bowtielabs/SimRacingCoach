@@ -41,18 +41,49 @@ export class IracingAdapter extends EventEmitter {
     const irsdkModule: any = await import('irsdk-node');
     const irsdk = irsdkModule.default ?? irsdkModule;
     const createClient = () => {
-      if (typeof irsdk === 'function') {
-        return irsdk();
+      const candidates = [
+        {
+          name: 'default',
+          create: () => (typeof irsdk === 'function' ? irsdk() : null),
+        },
+        {
+          name: 'init',
+          create: () => (typeof irsdk.init === 'function' ? irsdk.init() : null),
+        },
+        {
+          name: 'Iracing',
+          create: () => {
+            if (typeof irsdk.Iracing !== 'function') {
+              return null;
+            }
+            try {
+              return new irsdk.Iracing();
+            } catch (error) {
+              this.options.onLog?.(`irsdk-node Iracing() failed: ${String(error)}`);
+              return irsdk.Iracing();
+            }
+          },
+        },
+        {
+          name: 'createClient',
+          create: () =>
+            typeof irsdk.createClient === 'function' ? irsdk.createClient() : null,
+        },
+      ];
+
+      for (const candidate of candidates) {
+        try {
+          const client = candidate.create();
+          if (client) {
+            return client;
+          }
+        } catch (error) {
+          this.options.onLog?.(
+            `irsdk-node ${candidate.name} factory failed: ${String(error)}`,
+          );
+        }
       }
-      if (typeof irsdk.init === 'function') {
-        return irsdk.init();
-      }
-      if (typeof irsdk.Iracing === 'function') {
-        return new irsdk.Iracing();
-      }
-      if (typeof irsdk.createClient === 'function') {
-        return irsdk.createClient();
-      }
+
       throw new Error('irsdk-node did not expose a compatible client factory.');
     };
 
