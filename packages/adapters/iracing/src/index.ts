@@ -84,16 +84,10 @@ export class IracingAdapter extends EventEmitter {
         }
       }
 
-      return null;
+      throw new Error('irsdk-node did not expose a compatible client factory.');
     };
 
     this.client = createClient();
-    if (!this.client) {
-      const message = 'irsdk-node did not expose a compatible client factory.';
-      this.options.onLog?.(message);
-      this.emit('disconnected');
-      return;
-    }
 
     this.registerHandler('Connected', () => this.emit('connected'));
     this.registerHandler('Disconnected', () => this.emit('disconnected'));
