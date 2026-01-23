@@ -40,8 +40,60 @@ export class IracingAdapter extends EventEmitter {
   async connect() {
     const irsdkModule: any = await import('irsdk-node');
     const irsdk = irsdkModule.default ?? irsdkModule;
+    const createClient = () => {
+      const candidates = [
+        {
+          name: 'default',
+          create: () => (typeof irsdk === 'function' ? irsdk() : null),
+        },
+        {
+          name: 'init',
+          create: () => (typeof irsdk.init === 'function' ? irsdk.init() : null),
+        },
+        {
+          name: 'Iracing',
+          create: () => {
+            if (typeof irsdk.Iracing !== 'function') {
+              return null;
+            }
+            try {
+              return new irsdk.Iracing();
+            } catch (error) {
+              this.options.onLog?.(`irsdk-node Iracing() failed: ${String(error)}`);
+              return irsdk.Iracing();
+            }
+          },
+        },
+        {
+          name: 'createClient',
+          create: () =>
+            typeof irsdk.createClient === 'function' ? irsdk.createClient() : null,
+        },
+      ];
 
-    this.client = typeof irsdk.init === 'function' ? irsdk.init() : new irsdk.Iracing();
+      for (const candidate of candidates) {
+        try {
+          const client = candidate.create();
+          if (client) {
+            return client;
+          }
+        } catch (error) {
+          this.options.onLog?.(
+            `irsdk-node ${candidate.name} factory failed: ${String(error)}`,
+          );
+        }
+      }
+
+      return null;
+    };
+
+    this.client = createClient();
+    if (!this.client) {
+      const message = 'irsdk-node did not expose a compatible client factory.';
+      this.options.onLog?.(message);
+      this.emit('disconnected');
+      return;
+    }
 
     this.registerHandler('Connected', () => this.emit('connected'));
     this.registerHandler('Disconnected', () => this.emit('disconnected'));

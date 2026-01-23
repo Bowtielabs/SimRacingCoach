@@ -94,7 +94,14 @@ async function startService() {
     telemetryBuffer.push(frame);
   });
 
-  await adapter.connect();
+  try {
+    await adapter.connect();
+  } catch (error) {
+    iracingStatus = 'disconnected';
+    logger.error({ error }, 'failed to connect to iRacing adapter');
+    pushRecent('iRacing adapter no disponible. El servicio continuará sin telemetría.');
+    adapter = null;
+  }
 
   apiClient = new ApiClient({ baseUrl: config.api.url, token: config.api.token });
   apiClient.connectRecommendations(sessionId, handleRecommendation, setApiStatus);
