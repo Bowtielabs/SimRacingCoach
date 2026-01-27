@@ -4,8 +4,10 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
+    "prebuild": "pnpm --filter @simracing/config build",
     "dev": "concurrently -k -n build,app -c yellow,cyan \"tsc -p tsconfig.json -w\" \"wait-on dist/main.js && electron dist/main.js\"",
     "build": "tsc -p tsconfig.json",
+    "predev": "pnpm --filter @simracing/config build",
     "lint": "echo 'no lint configured'",
     "format": "echo 'no format configured'"
   },
