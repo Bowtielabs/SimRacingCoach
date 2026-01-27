@@ -5,8 +5,9 @@ import { z } from 'zod';
 
 const hotkeySchema = z.object({
   muteToggle: z.string(),
-  repeatLast: z.string(),
-  focusMode: z.string(),
+  volumeUp: z.string(),
+  volumeDown: z.string(),
+  repeatLast: z.string().optional(),
 });
 
 const thresholdsSchema = z.object({
@@ -15,6 +16,10 @@ const thresholdsSchema = z.object({
 });
 
 export const configSchema = z.object({
+  adapter: z.object({
+    id: z.string(),
+  }),
+  language: z.string(),
   api: z.object({
     url: z.string().url(),
     token: z.string().optional(),
@@ -44,6 +49,10 @@ export const configSchema = z.object({
 export type AppConfig = z.infer<typeof configSchema>;
 
 export const defaultConfig: AppConfig = {
+  adapter: {
+    id: 'iracing',
+  },
+  language: 'es-AR',
   api: {
     url: 'http://localhost:8080',
     token: '',
@@ -55,8 +64,9 @@ export const defaultConfig: AppConfig = {
   },
   hotkeys: {
     muteToggle: 'Ctrl+Shift+M',
+    volumeUp: 'Ctrl+Shift+Up',
+    volumeDown: 'Ctrl+Shift+Down',
     repeatLast: 'Ctrl+Shift+R',
-    focusMode: 'Ctrl+Shift+F',
   },
   filters: {
     TRAFFIC: true,
@@ -102,6 +112,8 @@ export function updateConfig(partial: Partial<AppConfig>, configPath = getConfig
   const next = {
     ...current,
     ...partial,
+    adapter: { ...current.adapter, ...partial.adapter },
+    language: partial.language ?? current.language,
     api: { ...current.api, ...partial.api },
     voice: { ...current.voice, ...partial.voice },
     hotkeys: { ...current.hotkeys, ...partial.hotkeys },

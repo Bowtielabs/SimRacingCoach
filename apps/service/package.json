@@ -11,7 +11,7 @@
     "format": "echo 'no format configured'"
   },
   "dependencies": {
-    "@simracing/adapters-iracing": "workspace:*",
+    "@simracing/adapters-runtime": "workspace:*",
     "@simracing/api-client": "workspace:*",
     "@simracing/config": "workspace:*",
     "@simracing/core": "workspace:*",
