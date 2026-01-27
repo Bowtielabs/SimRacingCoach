@@ -17,6 +17,7 @@
     "paths": {
       "@simracing/core": ["packages/core/src/index.ts"],
       "@simracing/adapters-iracing": ["packages/adapters/iracing/src/index.ts"],
+      "@simracing/adapters-runtime": ["packages/adapters-runtime/src/index.ts"],
       "@simracing/api-client": ["packages/api-client/src/index.ts"],
       "@simracing/speech": ["packages/speech/src/index.ts"],
       "@simracing/config": ["packages/config/src/index.ts"],
