@@ -1,6 +1,18 @@
 import http from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { IracingAdapter } from '@simracing/adapters-iracing';
+import { spawnSync } from 'node:child_process';
+import {
+  AdapterSupervisor,
+  AdapterId,
+  AdapterStatusMessage,
+  AdapterFrameMessage,
+  AdapterLogMessage,
+  AdapterSessionInfoMessage,
+  getAdapterSpec,
+  NormalizedFrame,
+} from '@simracing/adapters-runtime';
 import { ApiClient } from '@simracing/api-client';
 import {
   AppConfig,
@@ -9,7 +21,14 @@ import {
   updateConfig,
   watchConfig,
 } from '@simracing/config';
-import { LocalEventEngine, EventRouter, LocalEvent, Recommendation, TelemetryFrame } from '@simracing/core';
+import {
+  LocalEventEngine,
+  EventRouter,
+  LocalEvent,
+  Recommendation,
+  TelemetryFrame,
+  CapabilityMap,
+} from '@simracing/core';
 import { createLogger, FpsTracker } from '@simracing/diagnostics';
 import { SpeechQueue } from '@simracing/speech';
 
@@ -30,15 +49,22 @@ const speechQueue = new SpeechQueue({
 
 const router = new EventRouter({ focusMode: config.focusMode });
 
-let adapter: IracingAdapter | null = null;
+let adapterSupervisor: AdapterSupervisor | null = null;
+let adapterStatus: AdapterStatusMessage = {
+  type: 'status',
+  state: 'disconnected',
+  sim: config.adapter.id,
+  details: 'Not running',
+};
+let adapterRunning = false;
 let eventEngine: LocalEventEngine | null = null;
 let apiClient: ApiClient | null = null;
 let telemetryBuffer: TelemetryFrame[] = [];
 let latestFrameTime = 0;
 let apiStatus: 'online' | 'offline' = 'offline';
-let iracingStatus: 'connected' | 'disconnected' = 'disconnected';
 let recentMessages: string[] = [];
 let sessionId = 'local-session';
+let isMuted = false;
 
 function pushRecent(message: string) {
   recentMessages.unshift(message);
@@ -57,55 +83,167 @@ function applyConfig(next: AppConfig) {
   logger.info({ config }, 'config updated');
 }
 
-async function startService() {
-  adapter = new IracingAdapter({
-    debugDump: config.debug.telemetryDump,
-    onLog: (message) => logger.info(message),
-  });
+function buildCapabilities(frame: NormalizedFrame): CapabilityMap {
+  return {
+    hasCarLeftRight: typeof frame.traffic === 'number',
+    hasSessionFlags: typeof frame.session_flags_raw === 'number',
+    hasWaterTemp: typeof frame.temps?.water_c === 'number',
+    hasOilTemp: typeof frame.temps?.oil_c === 'number',
+    hasFuelLevel: false,
+    hasEngineWarnings: false,
+    hasTyreTemps: false,
+    hasBrakeTemps: false,
+  };
+}
 
-  adapter.on('connected', () => {
-    iracingStatus = 'connected';
-    logger.info('iRacing connected');
-  });
-  adapter.on('disconnected', () => {
-    iracingStatus = 'disconnected';
-    logger.warn('iRacing disconnected');
-  });
-  adapter.on('session', (id) => {
-    sessionId = id ?? sessionId;
-    if (apiClient) {
-      apiClient.disconnectRecommendations();
-      apiClient.connectRecommendations(sessionId, handleRecommendation, setApiStatus);
-    }
-  });
-  adapter.on('capabilities', (capabilities) => {
-    eventEngine = new LocalEventEngine(capabilities, {
+function handleAdapterFrame(message: AdapterFrameMessage) {
+  latestFrameTime = message.ts;
+  fpsTracker.tick();
+
+  const data = message.data;
+  if (!eventEngine) {
+    eventEngine = new LocalEventEngine(buildCapabilities(data), {
       waterTemp: config.temperatures.water,
       oilTemp: config.temperatures.oil,
     });
-  });
-  adapter.on('telemetry', (frame) => {
-    latestFrameTime = frame.t;
-    fpsTracker.tick();
-    if (eventEngine) {
-      const localEvents = eventEngine.update(frame).filter((event) => config.filters[event.category]);
-      routeEvents(localEvents);
-    }
-    telemetryBuffer.push(frame);
-  });
-
-  try {
-    await adapter.connect();
-  } catch (error) {
-    iracingStatus = 'disconnected';
-    logger.error({ error }, 'failed to connect to iRacing adapter');
-    pushRecent('iRacing adapter no disponible. El servicio continuará sin telemetría.');
-    adapter = null;
   }
 
+  const frame: TelemetryFrame = {
+    t: message.ts,
+    sim: 'iracing',
+    sessionId,
+    player: {},
+    traffic: {
+      carLeftRight: typeof data.traffic === 'number' ? data.traffic : undefined,
+    },
+    flags: {
+      sessionFlags:
+        typeof data.session_flags_raw === 'number' ? data.session_flags_raw : undefined,
+    },
+    powertrain: {
+      speedKph:
+        typeof data.speed_mps === 'number' ? data.speed_mps * 3.6 : undefined,
+      rpm: typeof data.rpm === 'number' ? data.rpm : undefined,
+      gear: typeof data.gear === 'number' ? data.gear : undefined,
+      throttle:
+        typeof data.throttle_pct === 'number' ? data.throttle_pct / 100 : undefined,
+      brake: typeof data.brake_pct === 'number' ? data.brake_pct / 100 : undefined,
+    },
+    temps: {
+      waterC: typeof data.temps?.water_c === 'number' ? data.temps.water_c : undefined,
+      oilC: typeof data.temps?.oil_c === 'number' ? data.temps.oil_c : undefined,
+    },
+  };
+
+  if (eventEngine) {
+    const localEvents = eventEngine
+      .update(frame)
+      .filter((event) => config.filters[event.category]);
+    routeEvents(localEvents);
+  }
+
+  telemetryBuffer.push(frame);
+}
+
+function handleAdapterStatus(message: AdapterStatusMessage) {
+  adapterStatus = message;
+  if (message.state === 'error') {
+    logger.error({ message }, 'adapter error');
+  } else {
+    logger.info({ message }, 'adapter status');
+  }
+}
+
+function handleAdapterLog(message: AdapterLogMessage) {
+  if (message.level === 'error') {
+    logger.error(message.message);
+  } else if (message.level === 'warn') {
+    logger.warn(message.message);
+  } else {
+    logger.info(message.message);
+  }
+}
+
+function handleSessionInfo(message: AdapterSessionInfoMessage) {
+  logger.info({ bytes: message.yaml.length }, 'session info updated');
+}
+
+function stopAdapter() {
+  adapterSupervisor?.stop();
+  adapterSupervisor = null;
+  adapterRunning = false;
+}
+
+function resolvePythonCommand(): string | null {
+  const candidates: { command: string; args: string[] }[] = [
+    { command: 'py', args: ['-3'] },
+    { command: 'python', args: [] },
+  ];
+
+  for (const candidate of candidates) {
+    const checkArgs = [...candidate.args, '--version'];
+    const result = spawnSync(candidate.command, checkArgs, { encoding: 'utf-8' });
+    if (!result.error && result.status === 0) {
+      return candidate.command;
+    }
+  }
+
+  return null;
+}
+
+function resolveAdapterCommand(adapterId: AdapterId) {
+  const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+  if (adapterId === 'iracing') {
+    const pythonCommand = resolvePythonCommand();
+    if (!pythonCommand) {
+      return null;
+    }
+    return {
+      command: pythonCommand,
+      args: pythonCommand === 'py'
+        ? ['-3', path.join(rootDir, 'apps/adapters/iracing-ctypes/adapter.py')]
+        : [path.join(rootDir, 'apps/adapters/iracing-ctypes/adapter.py')],
+    };
+  }
+
+  return {
+    command: process.execPath,
+    args: [path.join(rootDir, 'apps/adapters/stub/adapter.js'), adapterId],
+  };
+}
+
+function startAdapter(adapterId: AdapterId) {
+  stopAdapter();
+  eventEngine = null;
+  telemetryBuffer = [];
+
+  const command = resolveAdapterCommand(adapterId);
+  if (!command) {
+    adapterStatus = {
+      type: 'status',
+      state: 'error',
+      sim: adapterId,
+      details: 'Python 3.11+ no está disponible. Instala Python y asegúrate de que py -3 o python esté en el PATH.',
+    };
+    adapterRunning = false;
+    return;
+  }
+
+  adapterSupervisor = new AdapterSupervisor({
+    adapterId,
+    resolveCommand: () => command,
+  });
+  adapterSupervisor.on('status', handleAdapterStatus);
+  adapterSupervisor.on('frame', handleAdapterFrame);
+  adapterSupervisor.on('log', handleAdapterLog);
+  adapterSupervisor.on('sessionInfo', handleSessionInfo);
+  adapterSupervisor.start();
+  adapterRunning = true;
+}
+
+async function startService() {
   apiClient = new ApiClient({ baseUrl: config.api.url, token: config.api.token });
   apiClient.connectRecommendations(sessionId, handleRecommendation, setApiStatus);
-
   void telemetryLoop();
 }
 
@@ -139,6 +277,15 @@ async function telemetryLoop() {
   }
 }
 
+function adjustVolume(delta: number) {
+  const nextVolume = Math.max(0, Math.min(100, config.voice.volume + delta));
+  if (nextVolume === config.voice.volume) {
+    return;
+  }
+  const updated = updateConfig({ voice: { volume: nextVolume } }, configPath);
+  applyConfig(updated);
+}
+
 function controlServer() {
   const server = http.createServer((req, res) => {
     if (!req.url) {
@@ -148,20 +295,71 @@ function controlServer() {
     }
 
     if (req.method === 'GET' && req.url === '/status') {
+      const adapterSpec = getAdapterSpec(config.adapter.id as AdapterId);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
-          iracingStatus,
+          adapter: {
+            id: config.adapter.id,
+            label: adapterSpec.label,
+            simName: adapterSpec.simName,
+          },
+          adapterStatus,
+          adapterRunning,
           apiStatus,
           fps: fpsTracker.current,
           lastFrameAt: latestFrameTime,
           recentMessages,
+          muted: isMuted,
         }),
       );
       return;
     }
 
+    if (req.method === 'POST' && req.url === '/start') {
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+      req.on('end', () => {
+        try {
+          const payload = JSON.parse(body) as {
+            adapterId: AdapterId;
+            language?: string;
+            hotkeys?: AppConfig['hotkeys'];
+          };
+          if (payload.adapterId) {
+            const updated = updateConfig(
+              {
+                adapter: { id: payload.adapterId },
+                language: payload.language ?? config.language,
+                hotkeys: payload.hotkeys ?? config.hotkeys,
+              },
+              configPath,
+            );
+            applyConfig(updated);
+            startAdapter(payload.adapterId);
+          }
+          res.writeHead(200);
+          res.end();
+        } catch (error) {
+          logger.error({ error }, 'failed to start adapter');
+          res.writeHead(400);
+          res.end();
+        }
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && req.url === '/stop') {
+      stopAdapter();
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+
     if (req.method === 'POST' && req.url === '/mute') {
+      isMuted = true;
       speechQueue.setMuted(true);
       res.writeHead(200);
       res.end();
@@ -169,7 +367,30 @@ function controlServer() {
     }
 
     if (req.method === 'POST' && req.url === '/unmute') {
+      isMuted = false;
       speechQueue.setMuted(false);
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+
+    if (req.method === 'POST' && req.url === '/mute-toggle') {
+      isMuted = !isMuted;
+      speechQueue.setMuted(isMuted);
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+
+    if (req.method === 'POST' && req.url === '/volume/up') {
+      adjustVolume(5);
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+
+    if (req.method === 'POST' && req.url === '/volume/down') {
+      adjustVolume(-5);
       res.writeHead(200);
       res.end();
       return;

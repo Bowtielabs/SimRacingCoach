@@ -8,7 +8,7 @@ let mainWindow: BrowserWindow | null = null;
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1000,
-    height: 700,
+    height: 720,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -39,14 +39,19 @@ function registerHotkeys() {
   const config = loadConfig(getConfigPath());
 
   globalShortcut.register(config.hotkeys.muteToggle, () => {
-    void controlService('/mute');
+    void controlService('/mute-toggle');
   });
-  globalShortcut.register(config.hotkeys.repeatLast, () => {
-    void controlService('/repeat');
+  globalShortcut.register(config.hotkeys.volumeUp, () => {
+    void controlService('/volume/up');
   });
-  globalShortcut.register(config.hotkeys.focusMode, () => {
-    void controlService('/focus');
+  globalShortcut.register(config.hotkeys.volumeDown, () => {
+    void controlService('/volume/down');
   });
+  if (config.hotkeys.repeatLast) {
+    globalShortcut.register(config.hotkeys.repeatLast, () => {
+      void controlService('/repeat');
+    });
+  }
 }
 
 app.whenReady().then(() => {
@@ -61,13 +66,13 @@ app.whenReady().then(() => {
     registerHotkeys();
     return updated;
   });
+  ipcMain.handle('service:start', async (_event, payload) => {
+    await controlService('/start', payload);
+  });
+  ipcMain.handle('service:stop', async () => controlService('/stop'));
   ipcMain.handle('voice:test', async (_event, text: string) => {
     await controlService('/test-voice', { text });
   });
-  ipcMain.handle('service:mute', async () => controlService('/mute'));
-  ipcMain.handle('service:unmute', async () => controlService('/unmute'));
-  ipcMain.handle('service:repeat', async () => controlService('/repeat'));
-  ipcMain.handle('service:focus', async () => controlService('/focus'));
   ipcMain.handle('config:path', () => getConfigPath());
 
   app.on('activate', () => {
