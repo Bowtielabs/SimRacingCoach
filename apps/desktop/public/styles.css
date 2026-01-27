@@ -18,27 +18,27 @@ header {
   margin-bottom: 20px;
 }
 
-.controls button {
-  margin-left: 8px;
-}
-
 main {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 20px;
+  display: flex;
+  justify-content: center;
 }
 
 .panel {
+  width: min(960px, 100%);
   background: #171a21;
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.hidden {
+  display: none;
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(140px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
 }
 
 label {
@@ -49,8 +49,9 @@ label {
 }
 
 input[type='text'],
-input[type='number'] {
-  padding: 8px;
+input[type='number'],
+select {
+  padding: 8px 10px;
   border-radius: 6px;
   border: 1px solid #2c313c;
   background: #10131a;
@@ -61,8 +62,8 @@ button {
   background: #3866f4;
   border: none;
   color: #f5f7fa;
-  padding: 8px 12px;
-  border-radius: 6px;
+  padding: 10px 14px;
+  border-radius: 8px;
   cursor: pointer;
 }
 
@@ -70,9 +71,73 @@ button:hover {
   background: #4c77f8;
 }
 
+.run-button {
+  background: #d62c2c;
+  font-size: 18px;
+  font-weight: 700;
+  padding: 14px 24px;
+  border-radius: 10px;
+  text-transform: uppercase;
+}
+
+.run-button:hover {
+  background: #e04343;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.section {
+  margin-top: 20px;
+}
+
+.notes {
+  margin-top: 20px;
+  font-size: 14px;
+  color: #b7bcc6;
+}
+
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  margin: 12px 0;
+}
+
+.badge {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: #3b3f4a;
+}
+
+.badge-connected {
+  background: #1f8f3a;
+}
+
+.badge-waiting {
+  background: #c4931c;
+}
+
+.badge-disconnected,
+.badge-error {
+  background: #b03030;
+}
+
+.status-details {
+  color: #ffbdbd;
+}
+
 ul {
   list-style: none;
   padding: 0;
+  margin: 0;
 }
 
 li {
@@ -80,15 +145,4 @@ li {
   padding: 6px 10px;
   border-radius: 6px;
   margin-bottom: 6px;
-}
-
-.button-row {
-  display: flex;
-  gap: 10px;
-}
-
-.filters,
-.hotkeys,
-.notes {
-  margin-top: 16px;
 }
