@@ -1,8 +1,15 @@
 :root {
   color-scheme: dark;
-  font-family: 'Segoe UI', sans-serif;
-  background: #0f1115;
+  font-family: 'Outfit', 'Segoe UI', sans-serif;
+  background: radial-gradient(circle at 50% 0%, #1a1e26 0%, #0f1115 100%);
   color: #f5f7fa;
+  --primary: #3866f4;
+  --primary-hover: #4c77f8;
+  --danger: #d62c2c;
+  --danger-hover: #e04343;
+  --success: #1f8f3a;
+  --secondary: #2c313c;
+  --accent: #f0b429;
 }
 
 body {
@@ -25,10 +32,27 @@ main {
 
 .panel {
   width: min(960px, 100%);
-  background: #171a21;
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  background: rgba(23, 26, 33, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 20px;
+  padding: 30px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-top: 0;
+}
+
+h1 {
+  background: linear-gradient(90deg, #f5f7fa 0%, #b7bcc6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .hidden {
@@ -59,29 +83,62 @@ select {
 }
 
 button {
-  background: #3866f4;
+  background: var(--primary);
   border: none;
   color: #f5f7fa;
-  padding: 10px 14px;
+  padding: 10px 18px;
   border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 button:hover {
-  background: #4c77f8;
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(56, 102, 244, 0.3);
+}
+
+button:active {
+  transform: translateY(0);
 }
 
 .run-button {
-  background: #d62c2c;
+  background: linear-gradient(135deg, var(--danger) 0%, #b02020 100%);
   font-size: 18px;
-  font-weight: 700;
-  padding: 14px 24px;
-  border-radius: 10px;
+  font-weight: 800;
+  padding: 16px 32px;
+  border-radius: 12px;
   text-transform: uppercase;
+  width: 100%;
+  margin-top: 10px;
+  box-shadow: 0 4px 15px rgba(214, 44, 44, 0.4);
 }
 
 .run-button:hover {
-  background: #e04343;
+  background: linear-gradient(135deg, var(--danger-hover) 0%, #c03030 100%);
+  box-shadow: 0 6px 20px rgba(214, 44, 44, 0.5);
+}
+
+.btn-secondary {
+  background: var(--secondary);
+}
+
+.btn-secondary:hover {
+  background: #3b3f4a;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.btn-danger {
+  background: var(--danger);
+}
+
+.btn-success {
+  background: var(--success);
 }
 
 .actions {
@@ -134,6 +191,39 @@ button:hover {
   color: #ffbdbd;
 }
 
+.live-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background: #3b3f4a;
+  border-radius: 50%;
+  margin-right: 4px;
+  transition: all 0.3s ease;
+}
+
+.live-dot.active {
+  background: #22c55e;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.6);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.3);
+    opacity: 0.7;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 ul {
   list-style: none;
   padding: 0;
@@ -142,7 +232,60 @@ ul {
 
 li {
   background: #10131a;
-  padding: 6px 10px;
+  padding: 4px 10px;
   border-radius: 6px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
+  font-size: 0.85rem;
+}
+
+.messages-container {
+  height: 180px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 10px;
+}
+
+.messages-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.messages-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.range-label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.label-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #b7bcc6;
+}
+
+.value-badge {
+  background: var(--primary);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+input[type='range'] {
+  width: 100%;
+  accent-color: var(--primary);
+  cursor: pointer;
 }

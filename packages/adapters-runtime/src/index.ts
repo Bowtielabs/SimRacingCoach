@@ -11,6 +11,7 @@ export type AdapterId =
   | 'simutc'
   | 'ac'
   | 'acc'
+  | 'mock-iracing'
   | 'other';
 
 export type AdapterStatusState = 'waiting' | 'connected' | 'disconnected' | 'error';
@@ -31,6 +32,7 @@ export const ADAPTER_SPECS: AdapterSpec[] = [
   { id: 'simutc', label: 'SimuTC', simName: 'SimuTC' },
   { id: 'ac', label: 'Assetto Corsa', simName: 'Assetto Corsa' },
   { id: 'acc', label: 'ACC', simName: 'Assetto Corsa Competizione' },
+  { id: 'mock-iracing', label: 'iRacing (Mock)', simName: 'iRacing Mock' },
   { id: 'other', label: 'Other', simName: 'Other' },
 ];
 
@@ -48,6 +50,14 @@ export interface NormalizedFrame {
     water_c?: number | null;
     oil_c?: number | null;
   } | null;
+  fuel_level?: number | null;
+  on_pit_road?: boolean | null;
+  incidents?: number | null;
+  lap_times?: {
+    best?: number | null;
+    last?: number | null;
+  } | null;
+  engine_warnings?: number | null;
   tickCount?: number | null;
   tickRate?: number | null;
 }
@@ -165,7 +175,7 @@ export class AdapterSupervisor extends EventEmitter {
       this.child = spawn(resolved.command, resolved.args, {
         env: { ...process.env, ...this.env, ...resolved.env },
         cwd: resolved.cwd,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
       });
     } catch (error) {
       this.emitStatus({
@@ -174,6 +184,10 @@ export class AdapterSupervisor extends EventEmitter {
         sim: this.adapterId,
         details: `Failed to start adapter: ${String(error)}`,
       });
+      return;
+    }
+
+    if (!this.child) {
       return;
     }
 

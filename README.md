@@ -1,18 +1,35 @@
-# SimRacing Coach Companion (Adapters MMF)
+# SimRacing Coach Companion (iRacing MVP)
 
-Companion app para simracing con telemetría en tiempo real, motor local de eventos críticos y coaching remoto vía SimaRacingAnalyzer. Incluye servicio Node.js + UI desktop con Electron, y adapters externos para telemetría.
+Companion app para simracing con telemetría en tiempo real (iRacing), motor local de eventos críticos y coaching remoto vía SimaRacingAnalyzer. Incluye servicio Node.js + UI desktop con Electron.
 
 ## Requisitos
 
 - Windows 10/11
+- iRacing instalado (opcional - puede funcionar en modo mock sin iRacing)
 - Node.js 20+
 - pnpm 9+
-- Python 3.11+ (solo si usás el adapter de iRacing)
+- **Build tools para `irsdk-node`** (Visual Studio Build Tools + Python)
+
+### Instalación de Build Tools
+
+Para que `irsdk-node` funcione correctamente, necesitas:
+
+1. **Visual Studio Build Tools 2022** con:
+   - Desktop development with C++
+   - Windows 10/11 SDK
+
+2. **Python 3.x** (agregado al PATH)
+
+Descarga: https://visualstudio.microsoft.com/downloads/ → "Build Tools for Visual Studio 2022"
 
 ## Setup
 
 ```bash
+# Instalar dependencias
 pnpm install
+
+# Compilar todos los paquetes
+pnpm build
 ```
 
 ## Desarrollo (service + desktop)
@@ -25,10 +42,11 @@ Esto levanta:
 - `apps/service` (telemetría, eventos, TTS, integración con API)
 - `apps/desktop` (Electron UI)
 
-## Telemetry adapters
+## Build
 
-- **iRacing**: usa el SDK oficial vía Memory Mapped File y un adapter Python (`apps/adapters/iracing-ctypes/adapter.py`).
-- **Otros sims**: stubs que reportan "Not implemented yet" (AMS2, RaceRoom, rFactor, rFactor2, Automobilista, SimuTC, AC, ACC, Other).
+```bash
+pnpm build
+```
 
 ## Configuración de API
 
@@ -41,14 +59,98 @@ Ruta del config (Windows):
 %APPDATA%\SimRacingCoach\config.json
 ```
 
+## Hotkeys Globales
+
+Por defecto (configurables desde la UI):
+- **Ctrl+Shift+M**: Mute/Unmute
+- **Ctrl+Shift+R**: Repetir último mensaje
+- **Ctrl+Shift+F**: Modo foco (solo mensajes críticos)
+
 ## Troubleshooting
 
-- **Python no encontrado**: instalá Python 3.11+ y asegurate de que `py -3` o `python` estén en el PATH.
-- **No hay telemetría**: asegurate de que iRacing esté abierto y en pista.
-- **Sin audio TTS**: revisá permisos de PowerShell y que haya voces instaladas en Windows.
-- **API offline**: el servicio sigue funcionando localmente (spotter/flags/engine).
+### **irsdk-node no compila**
+
+**Error**: `gyp ERR! build error` o problemas con node-gyp
+
+**Solución**:
+1. Instala Visual Studio Build Tools (C++ Desktop) + Python
+2. Ejecuta en PowerShell como administrador:
+   ```powershell
+   npm install -g windows-build-tools
+   ```
+3. Reinicia y ejecuta `pnpm install` de nuevo
+
+### **No hay telemetría / iRacing desconectado**
+
+**Causas posibles**:
+- iRacing no está abierto
+- iRacing no está en pista (debe estar en sesión activa)
+- `irsdk-node` no pudo compilarse correctamente
+
+**Modo Mock**: Si `irsdk-node` no está disponible, el servicio funciona en **modo mock** (sin telemetría real pero sin crashear). Los logs lo indicarán.
+
+### **Sin audio TTS**
+
+**Solución**:
+1. Verifica permisos de PowerShell:
+   ```powershell
+   Get-ExecutionPolicy
+   # Debe ser RemoteSigned o Unrestricted
+   Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+   ```
+
+2. Verifica que existan voces instaladas en Windows:
+   ```powershell
+   Add-Type -AssemblyName System.Speech
+   $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+   $synth.GetInstalledVoices() | ForEach-Object { $_.VoiceInfo.Name }
+   ```
+
+   Para español, busca voces como "Microsoft Sabina Desktop" o "Microsoft Helena Desktop"
+
+### **API offline**
+
+El servicio sigue funcionando localmente (spotter/flags/engine) aunque la API esté offline. Solo se pierden las recomendaciones remotas.
+
+### **Errores de TypeScript en el IDE**
+
+Si ves errores después de clonar, ejecuta:
+```bash
+pnpm install
+```
+
+Los errores desaparecerán una vez instaladas todas las dependencias y tipos.
+
+## Arquitectura
+
+- **Service**: Lee telemetría de iRacing, detecta eventos críticos, maneja TTS
+- **Desktop**: Electron UI para configuración y monitoreo
+- **Packages compartidos**:
+  - `@simracing/core`: Motor de eventos local
+  - `@simracing/adapters-iracing`: Integración con irsdk-node
+  - `@simracing/speech`: Sistema de TTS con PowerShell
+  - `@simracing/api-client`: Cliente para servidor remoto
+  - `@simracing/config`: Gestión de configuración persistente
+  - `@simracing/diagnostics`: Logging y FPS tracking
 
 ## Scripts útiles
 
-- `pnpm dev`: corre service + desktop en paralelo.
-- `pnpm build`: compila todos los paquetes.
+- `pnpm dev`: corre service + desktop en paralelo
+- `pnpm build`: compila todos los paquetes
+- `pnpm lint`: linting (si configurado)
+- `pnpm format`: formateo (si configurado)
+
+## Características
+
+✅ **Spotter virtual**: Avisos de tráfico cercano (izquierda, derecha, tres autos, libre)  
+✅ **Alertas de motor**: Temperaturas críticas (agua/aceite), presión baja, motor dañado  
+✅ **Banderas**: Bandera amarilla, negra, azul  
+✅ **Modo foco**: Solo avisos críticos durante carrera  
+✅ **Coaching remoto**: Recibe recomendaciones de servidor externo vía WebSocket  
+✅ **Funciona offline**: Sistema local sigue funcionando sin API  
+✅ **Cooldowns inteligentes**: Evita spam de mensajes repetidos  
+✅ **Mensajes en español**: Todo localizado  
+
+## Licencia
+
+Propietario - Uso interno

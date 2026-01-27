@@ -11,14 +11,31 @@ export interface LoggerOptions {
 export function createLogger(options: LoggerOptions) {
   fs.mkdirSync(options.logDir, { recursive: true });
   const logPath = path.join(options.logDir, 'simracing.log');
-  const destination = pino.destination({ dest: logPath, sync: false });
+
+  const streams = [
+    {
+      level: options.level as any ?? 'info',
+      stream: pino.destination({ dest: logPath, sync: false }),
+    },
+    {
+      level: options.level as any ?? 'info',
+      stream: pino.transport({
+        target: 'pino-pretty',
+        options: {
+          colorize: true,
+          translateTime: 'HH:MM:ss',
+          ignore: 'pid,hostname',
+        },
+      }),
+    },
+  ];
 
   return pino(
     {
       level: options.level ?? 'info',
       name: options.name ?? 'simracing',
     },
-    destination,
+    pino.multistream(streams),
   );
 }
 

@@ -1,0 +1,462 @@
+import http from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { spawnSync } from 'node:child_process';
+import { AdapterSupervisor, getAdapterSpec, } from '@simracing/adapters-runtime';
+import { ApiClient } from '@simracing/api-client';
+import { getConfigPath, loadConfig, updateConfig, watchConfig, } from '@simracing/config';
+import { LocalEventEngine, EventRouter, } from '@simracing/core';
+import { createLogger, FpsTracker } from '@simracing/diagnostics';
+import { SpeechQueue } from '@simracing/speech';
+const configPath = getConfigPath();
+let config = loadConfig(configPath);
+const logger = createLogger({
+    logDir: './logs',
+    name: 'service',
+    level: 'debug',
+});
+const fpsTracker = new FpsTracker();
+const speechQueue = new SpeechQueue({
+    voice: config.voice.voice,
+    volume: config.voice.volume,
+    rate: config.voice.rate,
+});
+const router = new EventRouter({ focusMode: config.focusMode });
+let adapterSupervisor = null;
+let adapterStatus = {
+    type: 'status',
+    state: 'disconnected',
+    sim: config.adapter.id,
+    details: 'Not running',
+};
+let adapterRunning = false;
+let eventEngine = null;
+let apiClient = null;
+let telemetryBuffer = [];
+let latestFrameTime = 0;
+let apiStatus = 'offline';
+let recentMessages = [];
+let sessionId = 'local-session';
+let isMuted = false;
+function pushRecent(message) {
+    recentMessages.unshift(message);
+    recentMessages = recentMessages.slice(0, 10);
+}
+function applyConfig(next) {
+    const adapterChanged = next.adapter.id !== config.adapter.id;
+    config = next;
+    speechQueue.updateOptions({
+        voice: config.voice.voice,
+        volume: config.voice.volume,
+        rate: config.voice.rate,
+    });
+    speechQueue.setFocusMode(config.focusMode);
+    router.updateOptions({ focusMode: config.focusMode });
+    logger.info({ config }, 'config updated');
+    if (adapterChanged && adapterRunning) {
+        logger.info({ from: config.adapter.id, to: next.adapter.id }, 'adapter changed, restarting...');
+        startAdapter(next.adapter.id);
+    }
+}
+function buildCapabilities(frame) {
+    return {
+        hasCarLeftRight: frame.traffic !== undefined && frame.traffic !== null,
+        hasSessionFlags: typeof frame.session_flags_raw === 'number',
+        hasWaterTemp: typeof frame.temps?.water_c === 'number',
+        hasOilTemp: typeof frame.temps?.oil_c === 'number',
+        hasFuelLevel: typeof frame.fuel_level === 'number',
+        hasEngineWarnings: typeof frame.engine_warnings === 'number',
+        hasTyreTemps: false,
+        hasBrakeTemps: false,
+    };
+}
+function handleAdapterFrame(message) {
+    latestFrameTime = message.ts;
+    fpsTracker.tick();
+    const data = message.data;
+    if (!eventEngine) {
+        eventEngine = new LocalEventEngine(buildCapabilities(data), {
+            waterTemp: config.temperatures.water,
+            oilTemp: config.temperatures.oil,
+        });
+    }
+    const frame = {
+        t: message.ts,
+        sim: 'iracing',
+        sessionId,
+        player: {},
+        traffic: {
+            carLeftRight: typeof data.traffic === 'number' ? data.traffic : undefined,
+        },
+        flags: {
+            sessionFlags: typeof data.session_flags_raw === 'number' ? data.session_flags_raw : undefined,
+        },
+        powertrain: {
+            speedKph: typeof data.speed_mps === 'number' ? data.speed_mps * 3.6 : undefined,
+            rpm: typeof data.rpm === 'number' ? data.rpm : undefined,
+            gear: typeof data.gear === 'number' ? data.gear : undefined,
+            throttle: typeof data.throttle_pct === 'number' ? data.throttle_pct / 100 : undefined,
+            brake: typeof data.brake_pct === 'number' ? data.brake_pct / 100 : undefined,
+        },
+        temps: {
+            waterC: typeof data.temps?.water_c === 'number' ? data.temps.water_c : undefined,
+            oilC: typeof data.temps?.oil_c === 'number' ? data.temps.oil_c : undefined,
+        },
+        fuel: {
+            level: typeof data.fuel_level === 'number' ? data.fuel_level : undefined,
+        },
+        session: {
+            onPitRoad: typeof data.on_pit_road === 'boolean' ? data.on_pit_road : undefined,
+            incidents: typeof data.incidents === 'number' ? data.incidents : undefined,
+        },
+        lapTimes: {
+            best: typeof data.lap_times?.best === 'number' ? data.lap_times.best : undefined,
+            last: typeof data.lap_times?.last === 'number' ? data.lap_times.last : undefined,
+        },
+        engineWarnings: typeof data.engine_warnings === 'number' ? data.engine_warnings : undefined,
+    };
+    if (eventEngine) {
+        const localEvents = eventEngine
+            .update(frame)
+            .filter((event) => config.filters[event.category]);
+        routeEvents(localEvents);
+    }
+    telemetryBuffer.push(frame);
+}
+function handleAdapterStatus(message) {
+    adapterStatus = message;
+    if (message.state === 'error') {
+        logger.error({ message }, 'adapter error');
+    }
+    else {
+        logger.info({ message }, 'adapter status');
+    }
+}
+function handleAdapterLog(message) {
+    if (message.level === 'error') {
+        logger.error(message.message);
+    }
+    else if (message.level === 'warn') {
+        logger.warn(message.message);
+    }
+    else {
+        logger.info(message.message);
+    }
+}
+function handleSessionInfo(message) {
+    logger.info({ bytes: message.yaml.length }, 'session info updated');
+}
+function stopAdapter() {
+    adapterSupervisor?.stop();
+    adapterSupervisor = null;
+    adapterRunning = false;
+}
+function resolvePythonCommand() {
+    const candidates = [
+        { command: 'py', args: ['-3'] },
+        { command: 'python', args: [] },
+    ];
+    for (const candidate of candidates) {
+        const checkArgs = [...candidate.args, '--version'];
+        const result = spawnSync(candidate.command, checkArgs, { encoding: 'utf-8' });
+        if (!result.error && result.status === 0) {
+            return candidate.command;
+        }
+    }
+    return null;
+}
+function resolveAdapterCommand(adapterId) {
+    const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+    if (adapterId === 'iracing') {
+        if (adapterId === 'iracing') {
+            return {
+                command: process.execPath,
+                args: [path.join(rootDir, 'apps/adapters/iracing-node/adapter.js')],
+            };
+        }
+    }
+    if (adapterId === 'mock-iracing') {
+        return {
+            command: process.execPath,
+            args: [path.join(rootDir, 'apps/adapters/mock-iracing/adapter.js')],
+        };
+    }
+    return {
+        command: process.execPath,
+        args: [path.join(rootDir, 'apps/adapters/stub/adapter.js'), adapterId],
+    };
+}
+function startAdapter(adapterId) {
+    stopAdapter();
+    eventEngine = null;
+    telemetryBuffer = [];
+    const command = resolveAdapterCommand(adapterId);
+    if (!command) {
+        adapterStatus = {
+            type: 'status',
+            state: 'error',
+            sim: adapterId,
+            details: 'Python 3.11+ no está disponible. Instala Python y asegúrate de que py -3 o python esté en el PATH.',
+        };
+        adapterRunning = false;
+        return;
+    }
+    adapterSupervisor = new AdapterSupervisor({
+        adapterId,
+        resolveCommand: () => command,
+    });
+    adapterSupervisor.on('status', handleAdapterStatus);
+    adapterSupervisor.on('frame', handleAdapterFrame);
+    adapterSupervisor.on('log', handleAdapterLog);
+    adapterSupervisor.on('sessionInfo', handleSessionInfo);
+    adapterSupervisor.start();
+    adapterRunning = true;
+}
+async function startService() {
+    apiClient = new ApiClient({ baseUrl: config.api.url, token: config.api.token });
+    apiClient.connectRecommendations(sessionId, handleRecommendation, setApiStatus);
+    void telemetryLoop();
+}
+function routeEvents(events) {
+    const routed = router.route(events);
+    for (const { event, shouldBarge } of routed) {
+        speechQueue.enqueue(event, shouldBarge);
+        pushRecent(event.text);
+    }
+}
+function handleRecommendation(message) {
+    if (!config.filters[message.category]) {
+        return;
+    }
+    routeEvents([message]);
+}
+function setApiStatus(status) {
+    apiStatus = status;
+}
+async function telemetryLoop() {
+    const MAX_RETRY_BUFFER = 1000;
+    let retryBuffer = [];
+    while (true) {
+        const current = telemetryBuffer;
+        telemetryBuffer = [];
+        const toSend = [...retryBuffer, ...current];
+        if (apiClient && toSend.length > 0) {
+            const ok = await apiClient.sendTelemetry(toSend);
+            if (ok) {
+                retryBuffer = [];
+            }
+            else {
+                // Keep in retry buffer if failed, but cap it
+                retryBuffer = toSend.slice(-MAX_RETRY_BUFFER);
+                logger.warn({ count: retryBuffer.length }, 'telemetry send failed, buffering for retry');
+            }
+        }
+        await sleep(250); // Slightly slower loop to save CPU and handle batches better
+    }
+}
+function adjustVolume(delta) {
+    const nextVolume = Math.max(0, Math.min(100, config.voice.volume + delta));
+    if (nextVolume === config.voice.volume) {
+        return;
+    }
+    const updated = updateConfig({ voice: { volume: nextVolume } }, configPath);
+    applyConfig(updated);
+}
+function controlServer() {
+    const server = http.createServer(async (req, res) => {
+        console.log(`[Service] ${req.method} ${req.url}`);
+        logger.info({ method: req.method, url: req.url }, 'Incoming request');
+        if (!req.url) {
+            res.writeHead(404);
+            res.end();
+            return;
+        }
+        if (req.method === 'GET' && req.url === '/voices') {
+            try {
+                const voices = await SpeechQueue.getAvailableVoices();
+                console.log(`[Service] Returning ${voices.length} voices to UI:`, voices);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(voices));
+            }
+            catch (err) {
+                logger.error({ err }, 'failed to get voices');
+                res.writeHead(500);
+                res.end(JSON.stringify({ error: 'Failed to get voices' }));
+            }
+            return;
+        }
+        if (req.method === 'GET' && req.url === '/status') {
+            const adapterSpec = getAdapterSpec(config.adapter.id);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                adapter: {
+                    id: config.adapter.id,
+                    label: adapterSpec.label,
+                    simName: adapterSpec.simName,
+                },
+                adapterStatus,
+                adapterRunning,
+                apiStatus,
+                fps: fpsTracker.current,
+                lastFrameAt: latestFrameTime,
+                recentMessages,
+                muted: isMuted,
+                focusMode: config.focusMode,
+            }));
+            return;
+        }
+        if (req.method === 'POST' && req.url === '/start') {
+            let body = '';
+            req.on('data', (chunk) => {
+                body += chunk.toString();
+            });
+            req.on('end', () => {
+                try {
+                    const payload = JSON.parse(body);
+                    if (payload.adapterId) {
+                        const updated = updateConfig({
+                            adapter: { id: payload.adapterId },
+                            language: payload.language ?? config.language,
+                            hotkeys: payload.hotkeys ?? config.hotkeys,
+                        }, configPath);
+                        applyConfig(updated);
+                        startAdapter(payload.adapterId);
+                    }
+                    res.writeHead(200);
+                    res.end();
+                }
+                catch (error) {
+                    logger.error({ error }, 'failed to start adapter');
+                    res.writeHead(400);
+                    res.end();
+                }
+            });
+            return;
+        }
+        if (req.method === 'POST' && req.url === '/stop') {
+            stopAdapter();
+            res.writeHead(200);
+            res.end();
+            return;
+        }
+        if (req.method === 'POST' && req.url === '/mute') {
+            isMuted = true;
+            speechQueue.setMuted(true);
+            res.writeHead(200);
+            res.end();
+            return;
+        }
+        if (req.method === 'POST' && req.url === '/unmute') {
+            isMuted = false;
+            speechQueue.setMuted(false);
+            res.writeHead(200);
+            res.end();
+            return;
+        }
+        if (req.method === 'POST' && req.url === '/mute-toggle') {
+            isMuted = !isMuted;
+            speechQueue.setMuted(isMuted);
+            res.writeHead(200);
+            res.end();
+            return;
+        }
+        if (req.method === 'POST' && req.url === '/volume/up') {
+            adjustVolume(5);
+            res.writeHead(200);
+            res.end();
+            return;
+        }
+        if (req.method === 'POST' && req.url === '/volume/down') {
+            adjustVolume(-5);
+            res.writeHead(200);
+            res.end();
+            return;
+        }
+        if (req.method === 'POST' && req.url === '/repeat') {
+            speechQueue.repeatLast();
+            res.writeHead(200);
+            res.end();
+            return;
+        }
+        if (req.method === 'POST' && req.url === '/focus') {
+            config.focusMode = !config.focusMode;
+            router.updateOptions({ focusMode: config.focusMode });
+            speechQueue.setFocusMode(config.focusMode);
+            res.writeHead(200);
+            res.end();
+            return;
+        }
+        if (req.method === 'POST' && req.url === '/test-voice') {
+            let body = '';
+            req.on('data', (chunk) => {
+                body += chunk.toString();
+            });
+            req.on('end', () => {
+                try {
+                    const payload = JSON.parse(body);
+                    const text = payload.text ?? 'Prueba de voz';
+                    if (payload.voice || payload.volume !== undefined || payload.rate !== undefined) {
+                        console.log(`[Service] Overriding speech options for test: voice="${payload.voice}", volume=${payload.volume}, rate=${payload.rate}`);
+                        speechQueue.updateOptions({
+                            voice: payload.voice,
+                            volume: payload.volume,
+                            rate: payload.rate
+                        });
+                    }
+                    logger.info({ text, voice: payload.voice }, 'Received test-voice request');
+                    speechQueue.enqueue({
+                        id: `voice.test.${Date.now()}`,
+                        t: Date.now(),
+                        category: 'SYSTEM',
+                        severity: 'INFO',
+                        priority: 1,
+                        cooldownMs: 0,
+                        text,
+                        source: 'local',
+                    }, true);
+                    res.writeHead(200);
+                    res.end();
+                }
+                catch (error) {
+                    logger.error({ error }, 'failed to test voice');
+                    res.writeHead(400);
+                    res.end();
+                }
+            });
+            return;
+        }
+        if (req.method === 'POST' && req.url === '/config') {
+            let body = '';
+            req.on('data', (chunk) => {
+                body += chunk.toString();
+            });
+            req.on('end', () => {
+                try {
+                    const partial = JSON.parse(body);
+                    const updated = updateConfig(partial, configPath);
+                    applyConfig(updated);
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(updated));
+                }
+                catch (error) {
+                    logger.error({ error }, 'failed to update config');
+                    res.writeHead(400);
+                    res.end();
+                }
+            });
+            return;
+        }
+        res.writeHead(404);
+        res.end();
+    });
+    server.listen(7878, () => {
+        logger.info('control server listening on 7878');
+    });
+}
+watchConfig((next) => {
+    applyConfig(next);
+}, configPath);
+void startService();
+controlServer();
+//# sourceMappingURL=index.js.map

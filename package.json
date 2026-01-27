@@ -11,5 +11,8 @@
   "devDependencies": {
     "concurrently": "^8.2.2",
     "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "irsdk-node": "^4.3.0"
   }
 }

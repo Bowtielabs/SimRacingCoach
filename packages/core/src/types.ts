@@ -35,6 +35,14 @@ export interface TelemetryFrame {
   fuel?: {
     level?: number;
   };
+  session?: {
+    onPitRoad?: boolean;
+    incidents?: number;
+  };
+  lapTimes?: {
+    best?: number;
+    last?: number;
+  };
   engineWarnings?: number;
 }
 

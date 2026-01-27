@@ -35,6 +35,7 @@ export const configSchema = z.object({
     FLAGS: z.boolean(),
     ENGINE: z.boolean(),
     COACHING: z.boolean(),
+    SYSTEM: z.boolean(),
   }),
   focusMode: z.boolean(),
   temperatures: z.object({
@@ -58,7 +59,7 @@ export const defaultConfig: AppConfig = {
     token: '',
   },
   voice: {
-    voice: undefined,
+    voice: 'Microsoft Sabina Desktop',
     volume: 80,
     rate: 0,
   },
@@ -73,6 +74,7 @@ export const defaultConfig: AppConfig = {
     FLAGS: true,
     ENGINE: true,
     COACHING: true,
+    SYSTEM: true,
   },
   focusMode: false,
   temperatures: {
@@ -80,7 +82,7 @@ export const defaultConfig: AppConfig = {
     oil: { warning: 110, critical: 120 },
   },
   debug: {
-    telemetryDump: false,
+    telemetryDump: true,
   },
 };
 
@@ -107,7 +109,7 @@ export function saveConfig(config: AppConfig, configPath = getConfigPath()): voi
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 }
 
-export function updateConfig(partial: Partial<AppConfig>, configPath = getConfigPath()): AppConfig {
+export function updateConfig(partial: any, configPath = getConfigPath()): AppConfig {
   const current = loadConfig(configPath);
   const next = {
     ...current,

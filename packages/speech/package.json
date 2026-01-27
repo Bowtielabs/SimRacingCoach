@@ -15,8 +15,12 @@
     "lint": "echo 'no lint configured'",
     "format": "echo 'no format configured'"
   },
+  "dependencies": {
+    "@simracing/core": "workspace:*",
+    "say": "^0.16.0"
+  },
   "devDependencies": {
-    "typescript": "^5.5.4",
-    "@types/node": "^20.14.10"
+    "@types/node": "^20.14.10",
+    "typescript": "^5.5.4"
   }
 }

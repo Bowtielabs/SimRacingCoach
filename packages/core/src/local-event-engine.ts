@@ -35,6 +35,11 @@ export class LocalEventEngine {
     water: 'normal' as 'normal' | 'warning' | 'critical',
     oil: 'normal' as 'normal' | 'warning' | 'critical',
   };
+  private lastFuelLevel: number | undefined;
+  private fuelWarningThreshold = 5.0; // Litros
+  private lastOnPitRoad: boolean | undefined;
+  private lastIncidents: number | undefined;
+  private lastBestLap: number | undefined;
 
   constructor(capabilities: CapabilityMap, config: LocalEventConfig) {
     this.capabilities = capabilities;
@@ -96,6 +101,64 @@ export class LocalEventEngine {
     if (this.capabilities.hasEngineWarnings && frame.engineWarnings !== undefined) {
       const warningEvents = this.decodeEngineWarnings(frame.engineWarnings, now);
       events.push(...warningEvents);
+    }
+
+    if (this.capabilities.hasFuelLevel && frame.fuel?.level !== undefined) {
+      const fuelEvent = this.checkFuelLevel(frame.fuel.level, now);
+      if (fuelEvent) {
+        events.push(fuelEvent);
+      }
+    }
+
+    // New Rules: Pit Road
+    if (frame.session?.onPitRoad !== undefined) {
+      if (frame.session.onPitRoad !== this.lastOnPitRoad) {
+        events.push({
+          id: frame.session.onPitRoad ? 'pit.enter' : 'pit.exit',
+          t: now,
+          category: 'SYSTEM',
+          severity: 'INFO',
+          priority: 2,
+          cooldownMs: 5000,
+          text: frame.session.onPitRoad ? 'Entrando a pits' : 'Saliendo de pits',
+          source: 'local',
+        });
+        this.lastOnPitRoad = frame.session.onPitRoad;
+      }
+    }
+
+    // New Rules: Incidents
+    if (frame.session?.incidents !== undefined) {
+      if (this.lastIncidents !== undefined && frame.session.incidents > this.lastIncidents) {
+        events.push({
+          id: 'incident.increase',
+          t: now,
+          category: 'COACHING',
+          severity: 'WARNING',
+          priority: 3,
+          cooldownMs: 2000,
+          text: `Incidente: ${frame.session.incidents}x`,
+          source: 'local',
+        });
+      }
+      this.lastIncidents = frame.session.incidents;
+    }
+
+    // New Rules: Best Lap
+    if (frame.lapTimes?.best !== undefined && frame.lapTimes.best > 0) {
+      if (this.lastBestLap !== undefined && frame.lapTimes.best < this.lastBestLap) {
+        events.push({
+          id: 'lap.best',
+          t: now,
+          category: 'COACHING',
+          severity: 'INFO',
+          priority: 4,
+          cooldownMs: 10000,
+          text: `¡Nuevo récord personal! ${frame.lapTimes.best.toFixed(3)}`,
+          source: 'local',
+        });
+      }
+      this.lastBestLap = frame.lapTimes.best;
     }
 
     return events;
@@ -203,14 +266,39 @@ export class LocalEventEngine {
           id: `engine.warning.${bitValue}`,
           t,
           category: 'ENGINE',
-          severity: 'WARNING',
-          priority: 3,
-          cooldownMs: 5000,
+          severity: bitValue === 0x10 ? 'CRITICAL' : 'WARNING',
+          priority: bitValue === 0x10 ? 5 : 3,
+          cooldownMs: 10000,
           text: message,
           source: 'local',
         });
       }
     });
     return events;
+  }
+
+  private checkFuelLevel(level: number, t: number): LocalEvent | null {
+    if (this.lastFuelLevel === undefined) {
+      this.lastFuelLevel = level;
+      return null;
+    }
+
+    if (level <= this.fuelWarningThreshold && this.lastFuelLevel > this.fuelWarningThreshold) {
+      this.lastFuelLevel = level;
+      return {
+        id: 'fuel.low',
+        t,
+        category: 'ENGINE',
+        severity: 'WARNING',
+        priority: 4,
+        cooldownMs: 60000,
+        text: 'Bajo nivel de combustible',
+        source: 'local',
+        metadata: { level },
+      };
+    }
+
+    this.lastFuelLevel = level;
+    return null;
   }
 }

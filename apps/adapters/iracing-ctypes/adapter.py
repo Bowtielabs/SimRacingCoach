@@ -188,6 +188,12 @@ def build_frame(var_headers, header, buffer_bytes, tick_count):
     traffic = read_var_value(var_headers, "CarLeftRight", buffer_bytes)
     water_temp = read_var_value(var_headers, "WaterTemp", buffer_bytes)
     oil_temp = read_var_value(var_headers, "OilTemp", buffer_bytes)
+    engine_warnings = read_var_value(var_headers, "EngineWarnings", buffer_bytes)
+    fuel_level = read_var_value(var_headers, "FuelLevel", buffer_bytes)
+    on_pit_road = read_var_value(var_headers, "OnPitRoad", buffer_bytes)
+    incidents = read_var_value(var_headers, "PlayerCarMyIncidents", buffer_bytes)
+    best_lap = read_var_value(var_headers, "LapBestLapTime", buffer_bytes)
+    last_lap = read_var_value(var_headers, "LapLastLapTime", buffer_bytes)
 
     frame = {
         "speed_mps": speed,
@@ -200,6 +206,11 @@ def build_frame(var_headers, header, buffer_bytes, tick_count):
         "session_flags_raw": session_flags,
         "traffic": traffic if traffic is not None else "unknown",
         "temps": {"water_c": water_temp, "oil_c": oil_temp},
+        "fuel_level": fuel_level,
+        "on_pit_road": on_pit_road,
+        "incidents": incidents,
+        "lap_times": {"best": best_lap, "last": last_lap},
+        "engine_warnings": engine_warnings,
         "tickCount": tick_count,
         "tickRate": header.tickRate,
     }

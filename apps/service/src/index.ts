@@ -30,7 +30,7 @@ import {
   CapabilityMap,
 } from '@simracing/core';
 import { createLogger, FpsTracker } from '@simracing/diagnostics';
-import { SpeechQueue } from '@simracing/speech';
+import { SpeechQueue, SpeechOptions } from '@simracing/speech';
 
 const configPath = getConfigPath();
 let config = loadConfig(configPath);
@@ -38,6 +38,7 @@ let config = loadConfig(configPath);
 const logger = createLogger({
   logDir: './logs',
   name: 'service',
+  level: 'debug',
 });
 
 const fpsTracker = new FpsTracker();
@@ -72,6 +73,7 @@ function pushRecent(message: string) {
 }
 
 function applyConfig(next: AppConfig) {
+  const adapterChanged = next.adapter.id !== config.adapter.id;
   config = next;
   speechQueue.updateOptions({
     voice: config.voice.voice,
@@ -81,16 +83,21 @@ function applyConfig(next: AppConfig) {
   speechQueue.setFocusMode(config.focusMode);
   router.updateOptions({ focusMode: config.focusMode });
   logger.info({ config }, 'config updated');
+
+  if (adapterChanged && adapterRunning) {
+    logger.info({ from: config.adapter.id, to: next.adapter.id }, 'adapter changed, restarting...');
+    startAdapter(next.adapter.id as AdapterId);
+  }
 }
 
 function buildCapabilities(frame: NormalizedFrame): CapabilityMap {
   return {
-    hasCarLeftRight: typeof frame.traffic === 'number',
+    hasCarLeftRight: frame.traffic !== undefined && frame.traffic !== null,
     hasSessionFlags: typeof frame.session_flags_raw === 'number',
     hasWaterTemp: typeof frame.temps?.water_c === 'number',
     hasOilTemp: typeof frame.temps?.oil_c === 'number',
-    hasFuelLevel: false,
-    hasEngineWarnings: false,
+    hasFuelLevel: typeof frame.fuel_level === 'number',
+    hasEngineWarnings: typeof frame.engine_warnings === 'number',
     hasTyreTemps: false,
     hasBrakeTemps: false,
   };
@@ -133,6 +140,18 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
       waterC: typeof data.temps?.water_c === 'number' ? data.temps.water_c : undefined,
       oilC: typeof data.temps?.oil_c === 'number' ? data.temps.oil_c : undefined,
     },
+    fuel: {
+      level: typeof data.fuel_level === 'number' ? data.fuel_level : undefined,
+    },
+    session: {
+      onPitRoad: typeof data.on_pit_road === 'boolean' ? data.on_pit_road : undefined,
+      incidents: typeof data.incidents === 'number' ? data.incidents : undefined,
+    },
+    lapTimes: {
+      best: typeof data.lap_times?.best === 'number' ? data.lap_times.best : undefined,
+      last: typeof data.lap_times?.last === 'number' ? data.lap_times.last : undefined,
+    },
+    engineWarnings: typeof data.engine_warnings === 'number' ? data.engine_warnings : undefined,
   };
 
   if (eventEngine) {
@@ -194,15 +213,18 @@ function resolvePythonCommand(): string | null {
 function resolveAdapterCommand(adapterId: AdapterId) {
   const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
   if (adapterId === 'iracing') {
-    const pythonCommand = resolvePythonCommand();
-    if (!pythonCommand) {
-      return null;
+    if (adapterId === 'iracing') {
+      return {
+        command: process.execPath,
+        args: [path.join(rootDir, 'apps/adapters/iracing-node/adapter.js')],
+      };
     }
+  }
+
+  if (adapterId === 'mock-iracing') {
     return {
-      command: pythonCommand,
-      args: pythonCommand === 'py'
-        ? ['-3', path.join(rootDir, 'apps/adapters/iracing-ctypes/adapter.py')]
-        : [path.join(rootDir, 'apps/adapters/iracing-ctypes/adapter.py')],
+      command: process.execPath,
+      args: [path.join(rootDir, 'apps/adapters/mock-iracing/adapter.js')],
     };
   }
 
@@ -267,13 +289,25 @@ function setApiStatus(status: 'online' | 'offline') {
 }
 
 async function telemetryLoop() {
+  const MAX_RETRY_BUFFER = 1000;
+  let retryBuffer: TelemetryFrame[] = [];
+
   while (true) {
-    const buffer = telemetryBuffer;
+    const current = telemetryBuffer;
     telemetryBuffer = [];
-    if (apiClient && buffer.length > 0) {
-      await apiClient.sendTelemetry(buffer);
+
+    const toSend = [...retryBuffer, ...current];
+    if (apiClient && toSend.length > 0) {
+      const ok = await apiClient.sendTelemetry(toSend);
+      if (ok) {
+        retryBuffer = [];
+      } else {
+        // Keep in retry buffer if failed, but cap it
+        retryBuffer = toSend.slice(-MAX_RETRY_BUFFER);
+        logger.warn({ count: retryBuffer.length }, 'telemetry send failed, buffering for retry');
+      }
     }
-    await sleep(100);
+    await sleep(250); // Slightly slower loop to save CPU and handle batches better
   }
 }
 
@@ -287,10 +321,27 @@ function adjustVolume(delta: number) {
 }
 
 function controlServer() {
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
+    console.log(`[Service] ${req.method} ${req.url}`);
+    logger.info({ method: req.method, url: req.url }, 'Incoming request');
+
     if (!req.url) {
       res.writeHead(404);
       res.end();
+      return;
+    }
+
+    if (req.method === 'GET' && req.url === '/voices') {
+      try {
+        const voices = await SpeechQueue.getAvailableVoices();
+        console.log(`[Service] Returning ${voices.length} voices to UI:`, voices);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(voices));
+      } catch (err) {
+        logger.error({ err }, 'failed to get voices');
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to get voices' }));
+      }
       return;
     }
 
@@ -311,6 +362,7 @@ function controlServer() {
           lastFrameAt: latestFrameTime,
           recentMessages,
           muted: isMuted,
+          focusMode: config.focusMode,
         }),
       );
       return;
@@ -419,8 +471,24 @@ function controlServer() {
       });
       req.on('end', () => {
         try {
-          const payload = JSON.parse(body) as { text?: string };
+          const payload = JSON.parse(body) as {
+            text?: string;
+            voice?: string;
+            volume?: number;
+            rate?: number
+          };
           const text = payload.text ?? 'Prueba de voz';
+
+          if (payload.voice || payload.volume !== undefined || payload.rate !== undefined) {
+            console.log(`[Service] Overriding speech options for test: voice="${payload.voice}", volume=${payload.volume}, rate=${payload.rate}`);
+            speechQueue.updateOptions({
+              voice: payload.voice,
+              volume: payload.volume,
+              rate: payload.rate
+            });
+          }
+
+          logger.info({ text, voice: payload.voice }, 'Received test-voice request');
           speechQueue.enqueue(
             {
               id: `voice.test.${Date.now()}`,

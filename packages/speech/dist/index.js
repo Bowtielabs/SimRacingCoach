@@ -1,0 +1,138 @@
+import say from 'say';
+import { exec } from 'node:child_process';
+export class SpeechQueue {
+    queue = [];
+    currentProcess = null;
+    muted = false;
+    focusMode = false;
+    lastSpoken;
+    options;
+    onSpeak;
+    speaking = false;
+    constructor(options, onSpeak) {
+        this.options = options;
+        this.onSpeak = onSpeak;
+    }
+    updateOptions(options) {
+        this.options = { ...this.options, ...options };
+    }
+    setMuted(muted) {
+        this.muted = muted;
+    }
+    toggleFocusMode() {
+        this.focusMode = !this.focusMode;
+    }
+    setFocusMode(value) {
+        this.focusMode = value;
+    }
+    setSpeakHandler(handler) {
+        this.onSpeak = handler;
+    }
+    enqueue(event, bargeIn) {
+        if (this.focusMode && event.severity !== 'CRITICAL') {
+            return;
+        }
+        console.log(`[SpeechQueue] Enqueuing: "${event.text}" (bargeIn: ${bargeIn}, focus: ${this.focusMode})`);
+        if (bargeIn) {
+            this.interrupt();
+            this.queue.unshift(event);
+        }
+        else {
+            this.queue.push(event);
+        }
+        void this.playNext();
+    }
+    repeatLast() {
+        if (this.lastSpoken) {
+            this.enqueue(this.lastSpoken, true);
+        }
+    }
+    interrupt() {
+        say.stop();
+        this.speaking = false;
+    }
+    async playNext() {
+        if (this.speaking || this.queue.length === 0) {
+            return;
+        }
+        const next = this.queue.shift();
+        if (!next || this.muted) {
+            return;
+        }
+        this.lastSpoken = next;
+        if (this.onSpeak) {
+            this.onSpeak(next.text, this.options);
+        }
+        this.speaking = true;
+        // Explicitly use the selected voice, fallback only if truly empty/null
+        const voiceToUse = (this.options.voice && this.options.voice.trim() !== '')
+            ? this.options.voice
+            : 'Microsoft Sabina Desktop';
+        const speed = 1 + (this.options.rate * 0.1);
+        console.log(`[SpeechQueue] === SYNTHESIS START ===`);
+        console.log(`[SpeechQueue] Text: "${next.text}"`);
+        console.log(`[SpeechQueue] Voice from options: "${this.options.voice}"`);
+        console.log(`[SpeechQueue] Final voice used: "${voiceToUse}"`);
+        console.log(`[SpeechQueue] Speed: ${speed}`);
+        return new Promise((resolve) => {
+            try {
+                // Map 0-100 to SAPI Volume (0-100)
+                const volume = Math.max(0, Math.min(100, Math.round(this.options.volume)));
+                // Map rate (-10 to 10) to SAPI Rate (-10 to 10)
+                const rate = Math.max(-10, Math.min(10, Math.round(this.options.rate)));
+                const psCommand = `Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Volume = ${volume}; $s.Rate = ${rate}; $s.SelectVoice('${voiceToUse}'); $s.Speak('${next.text.replace(/'/g, "''")}')`;
+                const command = `powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCommand}"`;
+                console.log(`[SpeechQueue] Executing synthesis: volume=${volume}, rate=${rate}, voice="${voiceToUse}"`);
+                this.currentProcess = exec(command, (err) => {
+                    if (err) {
+                        console.error('[SpeechQueue] PS Synthesis error:', err);
+                    }
+                    this.speaking = false;
+                    this.currentProcess = null;
+                    resolve();
+                    void this.playNext();
+                });
+            }
+            catch (e) {
+                console.error('[SpeechQueue] Synthesis exception:', e);
+                this.speaking = false;
+                resolve();
+                void this.playNext();
+            }
+        });
+    }
+    static async getAvailableVoices() {
+        return new Promise((resolve) => {
+            try {
+                // This command returns the exact names recognized by the SAPI engine
+                const command = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).GetInstalledVoices().VoiceInfo.Name"';
+                console.log('[SpeechQueue] Discovery starts (using System.Speech)...');
+                exec(command, (err, stdout) => {
+                    if (err) {
+                        console.error('[SpeechQueue] PS Discovery error:', err);
+                        resolve(['Microsoft Sabina Desktop', 'Microsoft David Desktop', 'Microsoft Zira Desktop']);
+                        return;
+                    }
+                    if (!stdout || stdout.trim().length === 0) {
+                        console.warn('[SpeechQueue] PS Discovery returned empty');
+                        resolve(['Microsoft Sabina Desktop', 'Microsoft David Desktop', 'Microsoft Zira Desktop']);
+                        return;
+                    }
+                    const voices = stdout
+                        .replace(/\r/g, '')
+                        .split('\n')
+                        .map(v => v.trim())
+                        .filter(v => v.length > 0);
+                    const uniqueVoices = [...new Set(voices)].sort();
+                    console.log(`[SpeechQueue] Discovered ${uniqueVoices.length} voices:`, uniqueVoices);
+                    resolve(uniqueVoices);
+                });
+            }
+            catch (e) {
+                console.error('[SpeechQueue] Discovery exception:', e);
+                resolve(['Microsoft Sabina Desktop', 'Microsoft David Desktop', 'Microsoft Zira Desktop']);
+            }
+        });
+    }
+}
+//# sourceMappingURL=index.js.map

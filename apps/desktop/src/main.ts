@@ -1,5 +1,7 @@
-import { app, BrowserWindow, ipcMain, globalShortcut } from 'electron';
+import { app, BrowserWindow, ipcMain, globalShortcut, dialog } from 'electron';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { getConfigPath, loadConfig, updateConfig } from '@simracing/config';
 
 const serviceUrl = process.env.SERVICE_URL ?? 'http://127.0.0.1:7878';
@@ -10,7 +12,7 @@ function createWindow() {
     width: 1000,
     height: 720,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
     },
   });
@@ -19,11 +21,22 @@ function createWindow() {
 }
 
 async function controlService(endpoint: string, body?: unknown) {
-  await fetch(`${serviceUrl}${endpoint}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  try {
+    console.log(`[Main] Calling service: ${endpoint}`, body);
+    const res = await fetch(`${serviceUrl}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    console.log(`[Main] Service responded to ${endpoint}: ${res.status}`);
+    if (!res.ok) {
+      throw new Error(`Service responded with status: ${res.status}`);
+    }
+  } catch (err: any) {
+    console.error(`[Main] Error calling service ${endpoint}:`, err);
+    dialog.showErrorBox('Error de Servicio', `No se pudo conectar con el servicio (${endpoint}): ${err.message}`);
+    throw err;
+  }
 }
 
 async function getStatus() {
@@ -54,12 +67,21 @@ function registerHotkeys() {
   }
 }
 
+async function getVoices() {
+  const res = await fetch(`${serviceUrl}/voices`);
+  if (!res.ok) {
+    throw new Error('Could not fetch voices');
+  }
+  return res.json();
+}
+
 app.whenReady().then(() => {
   createWindow();
   registerHotkeys();
 
   ipcMain.handle('status', async () => getStatus());
   ipcMain.handle('config:get', async () => loadConfig(getConfigPath()));
+  ipcMain.handle('voice:list', async () => getVoices());
   ipcMain.handle('config:update', async (_event, partial) => {
     const updated = updateConfig(partial, getConfigPath());
     await controlService('/config', partial);
@@ -70,8 +92,13 @@ app.whenReady().then(() => {
     await controlService('/start', payload);
   });
   ipcMain.handle('service:stop', async () => controlService('/stop'));
-  ipcMain.handle('voice:test', async (_event, text: string) => {
-    await controlService('/test-voice', { text });
+  ipcMain.handle('service:mute', async () => controlService('/mute'));
+  ipcMain.handle('service:unmute', async () => controlService('/unmute'));
+  ipcMain.handle('service:repeat', async () => controlService('/repeat'));
+  ipcMain.handle('service:focus', async () => controlService('/focus'));
+  ipcMain.handle('voice:test', async (_event, text: string, options?: any) => {
+    console.log(`[Main] IPC voice:test received: "${text}"`, options);
+    await controlService('/test-voice', { text, ...options });
   });
   ipcMain.handle('config:path', () => getConfigPath());
 
