@@ -49,31 +49,76 @@ async function loop(sdk) {
             // Helper to extract value from irsdk-node v4 format
             const getValue = (field) => field?.value?.[0] ?? null;
 
-            // Map iRacing telemetry to NormalizedFrame
+            // Map iRacing telemetry to NormalizedFrame (comprehensive capture)
             const data = {
+                // Basic powertrain
                 speed_mps: getValue(telemetry.Speed) || 0,
                 rpm: getValue(telemetry.RPM),
                 gear: getValue(telemetry.Gear),
                 throttle_pct: (getValue(telemetry.Throttle) || 0) * 100,
                 brake_pct: (getValue(telemetry.Brake) || 0) * 100,
+                clutch_pct: (getValue(telemetry.Clutch) || 0) * 100,
                 steering_rad: getValue(telemetry.SteeringWheelAngle),
+
+                // Position & Lap data
+                position: getValue(telemetry.PlayerCarPosition),
+                class_position: getValue(telemetry.PlayerCarClassPosition),
                 lap: getValue(telemetry.Lap),
+                laps_completed: getValue(telemetry.LapCompleted),
+                lap_dist_pct: getValue(telemetry.LapDistPct),
+
+                // Session data
+                session_time: getValue(telemetry.SessionTime),
+                session_laps_remain: getValue(telemetry.SessionLapsRemain),
+                session_time_remain: getValue(telemetry.SessionTimeRemain),
+                session_num: getValue(telemetry.SessionNum),
+                session_state: getValue(telemetry.SessionState),
                 session_flags_raw: getValue(telemetry.SessionFlags),
+
+                // Traffic
                 traffic: getValue(telemetry.CarLeftRight),
+
+                // Temperatures
                 temps: {
                     water_c: getValue(telemetry.WaterTemp),
-                    oil_c: getValue(telemetry.OilTemp)
+                    oil_c: getValue(telemetry.OilTemp),
+                    track_c: getValue(telemetry.TrackTemp),
+                    air_c: getValue(telemetry.AirTemp)
                 },
+
+                // Fuel
                 fuel_level: getValue(telemetry.FuelLevel),
+                fuel_level_pct: getValue(telemetry.FuelLevelPct),
+                fuel_use_per_hour: getValue(telemetry.FuelUsePerHour),
+
+                // Pit & Garage state
                 on_pit_road: getValue(telemetry.OnPitRoad),
+                in_garage: getValue(telemetry.PlayerCarInGarage),
+                pit_sv_flags: getValue(telemetry.PitSvFlags),
+
+                // Incidents & Damage
                 incidents: getValue(telemetry.PlayerCarMyIncidents),
+
+                // Lap times
                 lap_times: {
                     best: getValue(telemetry.LapBestLapTime),
-                    last: getValue(telemetry.LapLastLapTime)
+                    last: getValue(telemetry.LapLastLapTime),
+                    current: getValue(telemetry.LapCurrentLapTime)
                 },
+
+                // Engine warnings
                 engine_warnings: getValue(telemetry.EngineWarnings),
-                tickCount: getValue(telemetry.SessionTick)
+
+                // System
+                tickCount: getValue(telemetry.SessionTick),
+                is_on_track: getValue(telemetry.IsOnTrack),
+                is_replay_playing: getValue(telemetry.IsReplayPlaying)
             };
+
+            // Debug logging for SessionFlags (remove after debugging)
+            if (data.session_flags_raw !== null && data.session_flags_raw !== 0) {
+                log(`SessionFlags detected: ${data.session_flags_raw} (0x${data.session_flags_raw.toString(16).toUpperCase()})`);
+            }
 
             emit({ type: 'frame', sim, ts: now, data });
         } catch (error) {

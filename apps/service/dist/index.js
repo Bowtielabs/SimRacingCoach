@@ -69,23 +69,53 @@ function buildCapabilities(frame) {
         hasEngineWarnings: typeof frame.engine_warnings === 'number',
         hasTyreTemps: false,
         hasBrakeTemps: false,
+        hasSteeringAngle: true, // iRacing always provides steering data
+        hasLateralG: true, // iRacing always provides G-force data
     };
 }
 function handleAdapterFrame(message) {
     latestFrameTime = message.ts;
     fpsTracker.tick();
     const data = message.data;
+    // Log telemetry data for debugging
+    console.log('[Telemetry]', {
+        traffic: data.traffic,
+        sessionFlags: data.session_flags_raw,
+        engineWarnings: data.engine_warnings,
+        onPitRoad: data.on_pit_road,
+        incidents: data.incidents,
+        waterTemp: data.temps?.water_c,
+        oilTemp: data.temps?.oil_c,
+        fuelLevel: data.fuel_level,
+        speed: data.speed_mps ? data.speed_mps * 3.6 : 0,
+        rpm: data.rpm,
+    });
+    // Only initialize event engine when car is actually moving
     if (!eventEngine) {
-        eventEngine = new LocalEventEngine(buildCapabilities(data), {
-            waterTemp: config.temperatures.water,
-            oilTemp: config.temperatures.oil,
-        });
+        const speedKph = data.speed_mps ? data.speed_mps * 3.6 : 0;
+        const rpm = data.rpm ?? 0;
+        // Wait until car is moving (speed > 5 kph OR rpm > 500)
+        if (speedKph > 5 || rpm > 500) {
+            console.log('[Service] 🚗 Car is moving (speed: ' + speedKph.toFixed(1) + ' kph, rpm: ' + rpm + ') - initializing EventEngine');
+            eventEngine = new LocalEventEngine(buildCapabilities(data), {
+                waterTemp: config.temperatures.water,
+                oilTemp: config.temperatures.oil,
+            });
+            console.log('[Service] ✅ EventEngine initialized - now processing events');
+        }
+        else {
+            // Skip processing until car starts (no logging to avoid spam)
+            return;
+        }
     }
     const frame = {
         t: message.ts,
         sim: 'iracing',
         sessionId,
-        player: {},
+        player: {
+            position: typeof data.position === 'number' ? data.position : undefined,
+            classPosition: typeof data.class_position === 'number' ? data.class_position : undefined,
+        },
         traffic: {
             carLeftRight: typeof data.traffic === 'number' ? data.traffic : undefined,
         },
@@ -98,21 +128,33 @@ function handleAdapterFrame(message) {
             gear: typeof data.gear === 'number' ? data.gear : undefined,
             throttle: typeof data.throttle_pct === 'number' ? data.throttle_pct / 100 : undefined,
             brake: typeof data.brake_pct === 'number' ? data.brake_pct / 100 : undefined,
+            clutch: typeof data.clutch_pct === 'number' ? data.clutch_pct / 100 : undefined,
         },
         temps: {
             waterC: typeof data.temps?.water_c === 'number' ? data.temps.water_c : undefined,
             oilC: typeof data.temps?.oil_c === 'number' ? data.temps.oil_c : undefined,
+            trackC: typeof data.temps?.track_c === 'number' ? data.temps.track_c : undefined,
+            airC: typeof data.temps?.air_c === 'number' ? data.temps.air_c : undefined,
         },
         fuel: {
             level: typeof data.fuel_level === 'number' ? data.fuel_level : undefined,
+            levelPct: typeof data.fuel_level_pct === 'number' ? data.fuel_level_pct : undefined,
+            usePerHour: typeof data.fuel_use_per_hour === 'number' ? data.fuel_use_per_hour : undefined,
         },
         session: {
             onPitRoad: typeof data.on_pit_road === 'boolean' ? data.on_pit_road : undefined,
+            inGarage: typeof data.in_garage === 'boolean' ? data.in_garage : undefined,
             incidents: typeof data.incidents === 'number' ? data.incidents : undefined,
+            lap: typeof data.lap === 'number' ? data.lap : undefined,
+            lapsCompleted: typeof data.laps_completed === 'number' ? data.laps_completed : undefined,
+            sessionTime: typeof data.session_time === 'number' ? data.session_time : undefined,
+            sessionLapsRemain: typeof data.session_laps_remain === 'number' ? data.session_laps_remain : undefined,
+            sessionTimeRemain: typeof data.session_time_remain === 'number' ? data.session_time_remain : undefined,
         },
         lapTimes: {
             best: typeof data.lap_times?.best === 'number' ? data.lap_times.best : undefined,
             last: typeof data.lap_times?.last === 'number' ? data.lap_times.last : undefined,
+            current: typeof data.lap_times?.current === 'number' ? data.lap_times.current : undefined,
         },
         engineWarnings: typeof data.engine_warnings === 'number' ? data.engine_warnings : undefined,
     };
@@ -125,7 +167,28 @@ function handleAdapterFrame(message) {
     telemetryBuffer.push(frame);
 }
 function handleAdapterStatus(message) {
+    const wasConnected = adapterStatus?.state === 'connected';
     adapterStatus = message;
+    // Reset event engine and clear messages when connecting
+    if (message.state === 'connected' && !wasConnected) {
+        console.log('[Service] Adapter connected - resetting state');
+        // Reset the event engine to start fresh (will be initialized when car moves)
+        eventEngine = null;
+        recentMessages = [];
+        router.reset(); // Clear cooldown cache
+        // Only emit connection message once
+        routeEvents([{
+                id: 'system.connected',
+                t: Date.now(),
+                category: 'SYSTEM',
+                severity: 'INFO',
+                priority: 5,
+                cooldownMs: 30000,
+                text: 'Entrenador Virtual conectado',
+                source: 'local',
+            }]);
+        console.log('[Service] Connection message emitted - waiting for car to move before processing events');
+    }
     if (message.state === 'error') {
         logger.error({ message }, 'adapter error');
     }
@@ -167,24 +230,28 @@ function resolvePythonCommand() {
     return null;
 }
 function resolveAdapterCommand(adapterId) {
-    const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+    // In production (packaged with Electron), use ADAPTER_PATH from environment
+    const adapterBasePath = process.env.ADAPTER_PATH
+        ? process.env.ADAPTER_PATH
+        : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../apps/adapters');
+    console.log('[Service] Adapter base path:', adapterBasePath);
+    console.log('[Service] NODE_ENV:', process.env.NODE_ENV);
+    console.log('[Service] process.execPath:', process.execPath);
     if (adapterId === 'iracing') {
-        if (adapterId === 'iracing') {
-            return {
-                command: process.execPath,
-                args: [path.join(rootDir, 'apps/adapters/iracing-node/adapter.js')],
-            };
-        }
+        return {
+            command: process.execPath,
+            args: [path.join(adapterBasePath, 'iracing-node/adapter.mjs')],
+        };
     }
     if (adapterId === 'mock-iracing') {
         return {
             command: process.execPath,
-            args: [path.join(rootDir, 'apps/adapters/mock-iracing/adapter.js')],
+            args: [path.join(adapterBasePath, 'mock-iracing/adapter.js')],
         };
     }
     return {
         command: process.execPath,
-        args: [path.join(rootDir, 'apps/adapters/stub/adapter.js'), adapterId],
+        args: [path.join(adapterBasePath, 'stub/adapter.js'), adapterId],
     };
 }
 function startAdapter(adapterId) {
@@ -219,7 +286,9 @@ async function startService() {
     void telemetryLoop();
 }
 function routeEvents(events) {
+    console.log('[RouteEvents] Routing', events.length, 'events:', events.map(e => e.text));
     const routed = router.route(events);
+    console.log('[RouteEvents] After router filter:', routed.length, 'events');
     for (const { event, shouldBarge } of routed) {
         speechQueue.enqueue(event, shouldBarge);
         pushRecent(event.text);
@@ -240,16 +309,19 @@ async function telemetryLoop() {
     while (true) {
         const current = telemetryBuffer;
         telemetryBuffer = [];
-        const toSend = [...retryBuffer, ...current];
-        if (apiClient && toSend.length > 0) {
-            const ok = await apiClient.sendTelemetry(toSend);
-            if (ok) {
-                retryBuffer = [];
-            }
-            else {
-                // Keep in retry buffer if failed, but cap it
-                retryBuffer = toSend.slice(-MAX_RETRY_BUFFER);
-                logger.warn({ count: retryBuffer.length }, 'telemetry send failed, buffering for retry');
+        // Only send to remote API if enabled
+        if (config.api.useRemoteApi) {
+            const toSend = [...retryBuffer, ...current];
+            if (apiClient && toSend.length > 0) {
+                const ok = await apiClient.sendTelemetry(toSend);
+                if (ok) {
+                    retryBuffer = [];
+                }
+                else {
+                    // Keep in retry buffer if failed, but cap it
+                    retryBuffer = toSend.slice(-MAX_RETRY_BUFFER);
+                    logger.warn({ count: retryBuffer.length }, 'telemetry send failed, buffering for retry');
+                }
             }
         }
         await sleep(250); // Slightly slower loop to save CPU and handle batches better

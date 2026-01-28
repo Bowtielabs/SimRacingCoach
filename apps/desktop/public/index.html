@@ -64,9 +64,13 @@
               API Token
               <input type="text" id="api-token" />
             </label>
-            <label class="checkbox-label">
-              <input type="checkbox" id="use-remote-api" />
-              <span>Usar API Remota (por defecto: Local)</span>
+            <label class="switch-label">
+              <span>Modo API Remota</span>
+              <div class="switch-container">
+                <input type="checkbox" id="use-remote-api" class="switch-input" />
+                <span class="switch-slider"></span>
+              </div>
+              <span class="switch-status" id="api-mode-status">Local</span>
             </label>
             <label>
               Voz

@@ -8,5 +8,6 @@ export declare class EventRouter {
     private state;
     constructor(options: RouterOptions);
     updateOptions(options: Partial<RouterOptions>): void;
+    reset(): void;
     route(events: LocalEvent[]): RoutedEvent[];
 }

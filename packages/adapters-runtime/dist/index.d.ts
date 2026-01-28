@@ -13,24 +13,43 @@ export interface NormalizedFrame {
     gear?: number | null;
     throttle_pct?: number | null;
     brake_pct?: number | null;
+    clutch_pct?: number | null;
     steering_rad?: number | null;
+    position?: number | null;
+    class_position?: number | null;
     lap?: number | null;
+    laps_completed?: number | null;
+    lap_dist_pct?: number | null;
+    session_time?: number | null;
+    session_laps_remain?: number | null;
+    session_time_remain?: number | null;
+    session_num?: number | null;
+    session_state?: number | null;
     session_flags_raw?: number | null;
     traffic?: number | string | null;
     temps?: {
         water_c?: number | null;
         oil_c?: number | null;
+        track_c?: number | null;
+        air_c?: number | null;
     } | null;
     fuel_level?: number | null;
+    fuel_level_pct?: number | null;
+    fuel_use_per_hour?: number | null;
     on_pit_road?: boolean | null;
+    in_garage?: boolean | null;
+    pit_sv_flags?: number | null;
     incidents?: number | null;
     lap_times?: {
         best?: number | null;
         last?: number | null;
+        current?: number | null;
     } | null;
     engine_warnings?: number | null;
     tickCount?: number | null;
     tickRate?: number | null;
+    is_on_track?: boolean | null;
+    is_replay_playing?: boolean | null;
 }
 export interface AdapterStatusMessage {
     type: 'status';

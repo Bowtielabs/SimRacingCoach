@@ -1,23 +1,30 @@
 {
   "name": "@simracing/desktop",
   "version": "0.1.0",
+  "description": "SimRacing Coach - Desktop companion app for iRacing with real-time telemetry and coaching",
+  "author": "SimRacing Coach Team",
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
     "dev": "concurrently -k -n build,app -c yellow,cyan \"tsc -p tsconfig.json -w\" \"wait-on dist/main.js && electron dist/main.js\"",
     "build": "tsc -p tsconfig.json",
+    "build:service": "node scripts/bundle-service.js",
+    "package": "electron-builder --config electron-builder.yml",
+    "dist": "pnpm build && pnpm build:service && pnpm package",
     "lint": "echo 'no lint configured'",
     "format": "echo 'no format configured'"
   },
   "dependencies": {
-    "@simracing/config": "workspace:*",
-    "electron": "^31.2.0"
+    "@simracing/config": "workspace:*"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2",
-    "typescript": "^5.5.4",
-    "wait-on": "^7.2.0",
+    "@types/electron": "^1.6.12",
     "@types/node": "^20.14.10",
-    "@types/electron": "^1.6.12"
+    "concurrently": "^8.2.2",
+    "electron": "^31.2.0",
+    "electron-builder": "^26.4.0",
+    "fs-extra": "^11.2.0",
+    "typescript": "^5.5.4",
+    "wait-on": "^7.2.0"
   }
 }

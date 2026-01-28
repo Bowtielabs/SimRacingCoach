@@ -23,6 +23,7 @@ export const configSchema = z.object({
   api: z.object({
     url: z.string().url(),
     token: z.string().optional(),
+    useRemoteApi: z.boolean(),
   }),
   voice: z.object({
     voice: z.string().optional(),
@@ -57,6 +58,7 @@ export const defaultConfig: AppConfig = {
   api: {
     url: 'http://localhost:8080',
     token: '',
+    useRemoteApi: false,  // Disabled by default - local coaching only
   },
   voice: {
     voice: 'Microsoft Sabina Desktop',

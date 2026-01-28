@@ -9,6 +9,9 @@ export class EventRouter {
     updateOptions(options) {
         this.options.focusMode = options.focusMode ?? this.options.focusMode;
     }
+    reset() {
+        this.state.lastEmittedAt.clear();
+    }
     route(events) {
         const routed = [];
         for (const event of events) {

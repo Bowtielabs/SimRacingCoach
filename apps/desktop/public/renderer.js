@@ -138,6 +138,9 @@ async function loadConfig() {
   inputs.apiToken.value = config.api.token ?? '';
   inputs.useRemoteApi.checked = config.api.useRemoteApi ?? false;
 
+  // Update status text
+  updateApiModeStatus(config.api.useRemoteApi ?? false);
+
   // Wait for voices to be populated then select the current one
   await populateVoices();
   const savedVoice = config.voice.voice && config.voice.voice.trim() !== ''
@@ -159,6 +162,14 @@ async function loadConfig() {
   inputs.configPath.textContent = await window.api.getConfigPath();
 }
 
+// Update API mode status text
+function updateApiModeStatus(isRemote) {
+  const statusElement = document.getElementById('api-mode-status');
+  if (statusElement) {
+    statusElement.textContent = isRemote ? 'API Remota' : 'Local';
+  }
+}
+
 // Config sync listeners
 inputs.voiceName.addEventListener('change', () => {
   window.api.updateConfig({ voice: { voice: inputs.voiceName.value } });
@@ -173,6 +184,7 @@ inputs.voiceRate.addEventListener('input', () => {
 });
 inputs.useRemoteApi.addEventListener('change', () => {
   console.log('[Renderer] useRemoteApi changed to:', inputs.useRemoteApi.checked);
+  updateApiModeStatus(inputs.useRemoteApi.checked);
   window.api.updateConfig({ api: { useRemoteApi: inputs.useRemoteApi.checked } });
 });
 
@@ -184,18 +196,19 @@ function formatStatusMessage(state, adapterLabel, running) {
     case 'connected':
       return `Conectado a: ${adapterLabel}`;
     case 'waiting':
-      return `Esperando datos de: ${adapterLabel}`;
+      return `Esperando ${adapterLabel}...`;
     case 'error':
       return `Error en: ${adapterLabel}`;
     case 'disconnected':
     default:
-      return `Sin conexión con: ${adapterLabel}`;
+      return `Esperando ${adapterLabel}...`;
   }
 }
 
 function updateBadge(state) {
   statusEls.badge.className = `badge badge-${state}`;
-  statusEls.badge.textContent = state.toUpperCase();
+  const badgeText = state === 'disconnected' ? 'WAITING' : state.toUpperCase();
+  statusEls.badge.textContent = badgeText;
 }
 
 async function refreshStatus() {

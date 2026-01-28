@@ -15,7 +15,7 @@ export function decodeFlags(mask, t) {
                 severity: 'WARNING',
                 priority: 3,
                 cooldownMs: 4000,
-                text: 'Bandera amarilla',
+                text: 'Bandera amarilla. Reduce velocidad, prohibido adelantar',
                 source: 'local',
             },
         });
@@ -30,7 +30,7 @@ export function decodeFlags(mask, t) {
                 severity: 'CRITICAL',
                 priority: 5,
                 cooldownMs: 4000,
-                text: 'Bandera negra',
+                text: 'Bandera negra. Entra a boxes inmediatamente',
                 source: 'local',
             },
         });
@@ -45,7 +45,7 @@ export function decodeFlags(mask, t) {
                 severity: 'INFO',
                 priority: 2,
                 cooldownMs: 4000,
-                text: 'Bandera azul',
+                text: 'Bandera azul. Auto más rápido aproximándose, deja pasar',
                 source: 'local',
             },
         });

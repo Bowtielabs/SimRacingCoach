@@ -12,11 +12,14 @@ export declare const configSchema: z.ZodObject<{
     api: z.ZodObject<{
         url: z.ZodString;
         token: z.ZodOptional<z.ZodString>;
+        useRemoteApi: z.ZodBoolean;
     }, "strip", z.ZodTypeAny, {
         url: string;
+        useRemoteApi: boolean;
         token?: string | undefined;
     }, {
         url: string;
+        useRemoteApi: boolean;
         token?: string | undefined;
     }>;
     voice: z.ZodObject<{
@@ -122,6 +125,7 @@ export declare const configSchema: z.ZodObject<{
     language: string;
     api: {
         url: string;
+        useRemoteApi: boolean;
         token?: string | undefined;
     };
     voice: {
@@ -163,6 +167,7 @@ export declare const configSchema: z.ZodObject<{
     language: string;
     api: {
         url: string;
+        useRemoteApi: boolean;
         token?: string | undefined;
     };
     voice: {

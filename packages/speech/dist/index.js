@@ -32,13 +32,26 @@ export class SpeechQueue {
         if (this.focusMode && event.severity !== 'CRITICAL') {
             return;
         }
-        console.log(`[SpeechQueue] Enqueuing: "${event.text}" (bargeIn: ${bargeIn}, focus: ${this.focusMode})`);
+        console.log(`[SpeechQueue] Enqueuing: "${event.text}" (priority: ${event.priority}, bargeIn: ${bargeIn}, queueSize: ${this.queue.length})`);
         if (bargeIn) {
             this.interrupt();
             this.queue.unshift(event);
         }
         else {
+            // Add to queue
             this.queue.push(event);
+            // Smart queue management: Keep only the most important messages
+            const MAX_QUEUE_SIZE = 2; // Maximum 2 messages waiting (+ 1 currently speaking = 3 total)
+            if (this.queue.length > MAX_QUEUE_SIZE) {
+                // Sort by priority (higher priority = higher number = more important)
+                this.queue.sort((a, b) => b.priority - a.priority);
+                // Keep only top MAX_QUEUE_SIZE messages
+                const dropped = this.queue.slice(MAX_QUEUE_SIZE);
+                this.queue = this.queue.slice(0, MAX_QUEUE_SIZE);
+                if (dropped.length > 0) {
+                    console.log(`[SpeechQueue] Dropped ${dropped.length} low-priority messages:`, dropped.map(e => `"${e.text}" (p${e.priority})`));
+                }
+            }
         }
         void this.playNext();
     }

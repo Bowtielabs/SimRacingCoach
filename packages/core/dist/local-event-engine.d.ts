@@ -10,10 +10,25 @@ export declare class LocalEventEngine {
     private lastOnPitRoad;
     private lastIncidents;
     private lastBestLap;
+    private lastEngineWarnings;
+    private isInitialized;
+    private lastLateBrakingWarning;
+    private lastCornerSpeedWarning;
+    private lastGearSuggestion;
+    private lastSpeed;
+    private lastBrake;
+    private inCorner;
+    private cornerEntrySpeed;
+    private cornerEntryTooFast;
+    private lastCornerExitFeedback;
     constructor(capabilities: CapabilityMap, config: LocalEventConfig);
     update(frame: TelemetryFrame): LocalEvent[];
     private buildTrafficEvent;
     private checkTemperature;
     private decodeEngineWarnings;
     private checkFuelLevel;
+    private checkLateBraking;
+    private checkCornerSpeed;
+    private checkGearSuggestion;
+    private checkCornerExit;
 }
