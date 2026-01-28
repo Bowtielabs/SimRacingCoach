@@ -12,6 +12,8 @@ export interface TelemetryFrame {
   sessionId?: string;
   player: {
     carIdx?: number;
+    position?: number;
+    classPosition?: number;
   };
   traffic: {
     carLeftRight?: number;
@@ -25,23 +27,40 @@ export interface TelemetryFrame {
     gear?: number;
     throttle?: number;
     brake?: number;
+    clutch?: number;
   };
   temps: {
     waterC?: number;
     oilC?: number;
+    trackC?: number;
+    airC?: number;
     tyreC?: number[];
     brakeC?: number[];
   };
   fuel?: {
     level?: number;
+    levelPct?: number;
+    usePerHour?: number;
+  };
+  physics?: {
+    steeringAngle?: number;  // Steering wheel angle in degrees (-1 to 1 normalized, or in degrees)
+    lateralG?: number;       // Lateral G-force
+    longitudinalG?: number;  // Longitudinal G-force (braking/acceleration)
   };
   session?: {
     onPitRoad?: boolean;
+    inGarage?: boolean;
     incidents?: number;
+    lap?: number;
+    lapsCompleted?: number;
+    sessionTime?: number;
+    sessionLapsRemain?: number;
+    sessionTimeRemain?: number;
   };
   lapTimes?: {
     best?: number;
     last?: number;
+    current?: number;
   };
   engineWarnings?: number;
 }
@@ -55,6 +74,8 @@ export interface CapabilityMap {
   hasEngineWarnings: boolean;
   hasTyreTemps: boolean;
   hasBrakeTemps: boolean;
+  hasSteeringAngle: boolean;
+  hasLateralG: boolean;
 }
 
 export interface LocalEvent {

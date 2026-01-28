@@ -37,6 +37,13 @@ export class IracingAdapter extends EventEmitter {
     try {
       this.log('Attempting to connect to iRacing...');
 
+      // Asegurar shutdown previo para evitar múltiples instancias
+      try {
+        irsdk.shutdown();
+      } catch {
+        // Ignorar errores si no había nada que cerrar
+      }
+
       // Inicializar SDK
       const result = irsdk.init();
 
@@ -145,12 +152,24 @@ export class IracingAdapter extends EventEmitter {
       }
 
       try {
-        // Verificar si todavía está conectado
-        if (!irsdk.waitForConnection()) {
-          this.log('Lost connection to iRacing');
-          this.disconnect();
-          this.scheduleReconnect();
-          return;
+        // Intentar leer una variable simple para verificar conectividad
+        // (evitamos waitForConnection() en cada poll - puede causar crashes)
+        const testValue = this.getVar('IsOnTrack');
+        if (testValue === undefined || testValue === null) {
+          // Posiblemente desconectado, verificar con un método más seguro
+          try {
+            if (!irsdk.waitForConnection()) {
+              this.log('Lost connection to iRacing');
+              this.disconnect();
+              this.scheduleReconnect();
+              return;
+            }
+          } catch (err) {
+            this.log(`Connection check failed: ${err}`);
+            this.disconnect();
+            this.scheduleReconnect();
+            return;
+          }
         }
 
         // Leer session ID
@@ -195,7 +214,7 @@ export class IracingAdapter extends EventEmitter {
         sessionFlags: this.getVar('SessionFlags'),
       },
       powertrain: {
-        speedKph: this.getVar('Speed') * 3.6, // m/s to km/h
+        speedKph: (this.getVar('Speed') ?? 0) * 3.6, // m/s to km/h
         rpm: this.getVar('RPM'),
         gear: this.getVar('Gear'),
         throttle: this.getVar('Throttle'),
@@ -219,6 +238,11 @@ export class IracingAdapter extends EventEmitter {
       },
       fuel: {
         level: this.getVar('FuelLevel'),
+      },
+      physics: {
+        steeringAngle: this.getVar('SteeringWheelAngle'),  // Returns value in radians, ~-1 to 1
+        lateralG: this.getVar('LatAccel'),  // Lateral acceleration in G
+        longitudinalG: this.getVar('LongAccel'),  // Longitudinal acceleration in G
       },
       engineWarnings: this.getVar('EngineWarnings'),
     };

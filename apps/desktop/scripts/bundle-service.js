@@ -118,8 +118,23 @@ fs.copySync(adaptersSrc, adaptersDest, {
     }
 });
 
+// Explicitly ensure critical dependencies are copied
+console.log('  Ensuring critical dependencies...');
+const criticalDeps = ['irsdk-node', 'pino', 'edge-tts'];
+const rootNodeModules = path.join(rootDir, 'node_modules');
+
+criticalDeps.forEach(dep => {
+    const depSrc = path.join(rootNodeModules, dep);
+    const depDest = path.join(serviceNodeModules, dep);
+
+    if (fs.existsSync(depSrc) && !fs.existsSync(depDest)) {
+        try {
+            fs.copySync(depSrc, depDest);
+            console.log(`    ✓ ${dep}`);
+        } catch (err) {
+            console.warn(`    ⚠ Failed to copy ${dep}`);
+        }
+    }
+});
 
 console.log('✅ Service bundled successfully!');
-
-console.log('✅ Service bundled successfully!');
-

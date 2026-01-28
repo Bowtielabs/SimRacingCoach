@@ -100,6 +100,8 @@ function buildCapabilities(frame: NormalizedFrame): CapabilityMap {
     hasEngineWarnings: typeof frame.engine_warnings === 'number',
     hasTyreTemps: false,
     hasBrakeTemps: false,
+    hasSteeringAngle: true,  // iRacing always provides steering data
+    hasLateralG: true,       // iRacing always provides G-force data
   };
 }
 
@@ -112,6 +114,7 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
   // Log telemetry data for debugging
   console.log('[Telemetry]', {
     traffic: data.traffic,
+    sessionFlags: data.session_flags_raw,
     engineWarnings: data.engine_warnings,
     onPitRoad: data.on_pit_road,
     incidents: data.incidents,
@@ -145,7 +148,10 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
     t: message.ts,
     sim: 'iracing',
     sessionId,
-    player: {},
+    player: {
+      position: typeof data.position === 'number' ? data.position : undefined,
+      classPosition: typeof data.class_position === 'number' ? data.class_position : undefined,
+    },
     traffic: {
       carLeftRight: typeof data.traffic === 'number' ? data.traffic : undefined,
     },
@@ -161,21 +167,33 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
       throttle:
         typeof data.throttle_pct === 'number' ? data.throttle_pct / 100 : undefined,
       brake: typeof data.brake_pct === 'number' ? data.brake_pct / 100 : undefined,
+      clutch: typeof data.clutch_pct === 'number' ? data.clutch_pct / 100 : undefined,
     },
     temps: {
       waterC: typeof data.temps?.water_c === 'number' ? data.temps.water_c : undefined,
       oilC: typeof data.temps?.oil_c === 'number' ? data.temps.oil_c : undefined,
+      trackC: typeof data.temps?.track_c === 'number' ? data.temps.track_c : undefined,
+      airC: typeof data.temps?.air_c === 'number' ? data.temps.air_c : undefined,
     },
     fuel: {
       level: typeof data.fuel_level === 'number' ? data.fuel_level : undefined,
+      levelPct: typeof data.fuel_level_pct === 'number' ? data.fuel_level_pct : undefined,
+      usePerHour: typeof data.fuel_use_per_hour === 'number' ? data.fuel_use_per_hour : undefined,
     },
     session: {
       onPitRoad: typeof data.on_pit_road === 'boolean' ? data.on_pit_road : undefined,
+      inGarage: typeof data.in_garage === 'boolean' ? data.in_garage : undefined,
       incidents: typeof data.incidents === 'number' ? data.incidents : undefined,
+      lap: typeof data.lap === 'number' ? data.lap : undefined,
+      lapsCompleted: typeof data.laps_completed === 'number' ? data.laps_completed : undefined,
+      sessionTime: typeof data.session_time === 'number' ? data.session_time : undefined,
+      sessionLapsRemain: typeof data.session_laps_remain === 'number' ? data.session_laps_remain : undefined,
+      sessionTimeRemain: typeof data.session_time_remain === 'number' ? data.session_time_remain : undefined,
     },
     lapTimes: {
       best: typeof data.lap_times?.best === 'number' ? data.lap_times.best : undefined,
       last: typeof data.lap_times?.last === 'number' ? data.lap_times.last : undefined,
+      current: typeof data.lap_times?.current === 'number' ? data.lap_times.current : undefined,
     },
     engineWarnings: typeof data.engine_warnings === 'number' ? data.engine_warnings : undefined,
   };
@@ -210,7 +228,7 @@ function handleAdapterStatus(message: AdapterStatusMessage) {
       severity: 'INFO',
       priority: 5,
       cooldownMs: 30000,
-      text: 'SimRacingCoach Conectado',
+      text: 'Entrenador Virtual conectado',
       source: 'local',
     }]);
 
@@ -274,7 +292,7 @@ function resolveAdapterCommand(adapterId: AdapterId) {
   if (adapterId === 'iracing') {
     return {
       command: process.execPath,
-      args: [path.join(adapterBasePath, 'iracing/adapter.mjs')],
+      args: [path.join(adapterBasePath, 'iracing-node/adapter.mjs')],
     };
   }
 

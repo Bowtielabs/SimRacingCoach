@@ -10,10 +10,8 @@ files:
   - "!**/*.ts"
   - "!**/*.map"
 extraResources:
-  - from: resources/service
-    to: service
-  - from: resources/adapters
-    to: adapters
+  - from: resources
+    to: .
 win:
   target:
     - target: dir
