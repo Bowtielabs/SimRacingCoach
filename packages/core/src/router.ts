@@ -23,6 +23,10 @@ export class EventRouter {
     this.options.focusMode = options.focusMode ?? this.options.focusMode;
   }
 
+  reset() {
+    this.state.lastEmittedAt.clear();
+  }
+
   route(events: LocalEvent[]): RoutedEvent[] {
     const routed: RoutedEvent[] = [];
 

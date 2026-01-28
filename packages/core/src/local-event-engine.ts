@@ -40,6 +40,8 @@ export class LocalEventEngine {
   private lastOnPitRoad: boolean | undefined;
   private lastIncidents: number | undefined;
   private lastBestLap: number | undefined;
+  private lastEngineWarnings: number = 0; // Track engine warning mask
+  private isInitialized: boolean = false; // Track if we've initialized state
 
   constructor(capabilities: CapabilityMap, config: LocalEventConfig) {
     this.capabilities = capabilities;
@@ -49,6 +51,25 @@ export class LocalEventEngine {
   update(frame: TelemetryFrame): LocalEvent[] {
     const events: LocalEvent[] = [];
     const now = frame.t;
+
+    // On first frame, initialize all state without emitting events
+    if (!this.isInitialized) {
+      console.log('[LocalEventEngine] INITIALIZING - skipping all events on first frame');
+      if (this.capabilities.hasCarLeftRight && frame.traffic.carLeftRight !== undefined) {
+        this.lastTrafficState = frame.traffic.carLeftRight;
+      }
+      if (this.capabilities.hasEngineWarnings && typeof frame.engineWarnings === 'number') {
+        this.lastEngineWarnings = frame.engineWarnings;
+      }
+      if (typeof frame.session?.onPitRoad === 'boolean') {
+        this.lastOnPitRoad = frame.session.onPitRoad;
+      }
+      if (typeof frame.session?.incidents === 'number') {
+        this.lastIncidents = frame.session.incidents;
+      }
+      this.isInitialized = true;
+      return events; // Return empty - no events on first frame
+    }
 
     if (this.capabilities.hasCarLeftRight && frame.traffic.carLeftRight !== undefined) {
       const current = frame.traffic.carLeftRight;
@@ -98,7 +119,7 @@ export class LocalEventEngine {
       }
     }
 
-    if (this.capabilities.hasEngineWarnings && frame.engineWarnings !== undefined) {
+    if (this.capabilities.hasEngineWarnings && typeof frame.engineWarnings === 'number') {
       const warningEvents = this.decodeEngineWarnings(frame.engineWarnings, now);
       events.push(...warningEvents);
     }
@@ -111,7 +132,7 @@ export class LocalEventEngine {
     }
 
     // New Rules: Pit Road
-    if (frame.session?.onPitRoad !== undefined) {
+    if (typeof frame.session?.onPitRoad === 'boolean') {
       if (frame.session.onPitRoad !== this.lastOnPitRoad) {
         events.push({
           id: frame.session.onPitRoad ? 'pit.enter' : 'pit.exit',
@@ -128,7 +149,7 @@ export class LocalEventEngine {
     }
 
     // New Rules: Incidents
-    if (frame.session?.incidents !== undefined) {
+    if (typeof frame.session?.incidents === 'number') {
       if (this.lastIncidents !== undefined && frame.session.incidents > this.lastIncidents) {
         events.push({
           id: 'incident.increase',
@@ -145,7 +166,7 @@ export class LocalEventEngine {
     }
 
     // New Rules: Best Lap
-    if (frame.lapTimes?.best !== undefined && frame.lapTimes.best > 0) {
+    if (typeof frame.lapTimes?.best === 'number' && frame.lapTimes.best > 0) {
       if (this.lastBestLap !== undefined && frame.lapTimes.best < this.lastBestLap) {
         events.push({
           id: 'lap.best',
@@ -259,9 +280,21 @@ export class LocalEventEngine {
 
   private decodeEngineWarnings(mask: number, t: number): LocalEvent[] {
     const events: LocalEvent[] = [];
+
+    // Only emit events for NEW warnings (bits that changed from 0 to 1)
+    const newWarnings = mask & ~this.lastEngineWarnings;
+
+    console.log('[EngineWarnings]', {
+      currentMask: mask,
+      lastMask: this.lastEngineWarnings,
+      newWarnings: newWarnings,
+    });
+
     Object.entries(ENGINE_WARNING_MESSAGES).forEach(([bit, message]) => {
       const bitValue = Number(bit);
-      if ((mask & bitValue) !== 0) {
+      // Only create event if this specific bit just turned on
+      if ((newWarnings & bitValue) !== 0) {
+        console.log('[EngineWarnings] NEW WARNING:', message, 'bit:', bitValue);
         events.push({
           id: `engine.warning.${bitValue}`,
           t,
@@ -274,6 +307,8 @@ export class LocalEventEngine {
         });
       }
     });
+
+    this.lastEngineWarnings = mask;
     return events;
   }
 

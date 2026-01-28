@@ -1,0 +1,22 @@
+appId: com.simracing.coach
+productName: SimRacing Coach
+asar: false
+directories:
+  output: dist
+  buildResources: build
+files:
+  - dist/**/*
+  - public/**/*
+  - "!**/*.ts"
+  - "!**/*.map"
+extraResources:
+  - from: resources/service
+    to: service
+  - from: resources/adapters
+    to: adapters
+win:
+  target:
+    - target: dir
+      arch:
+        - x64
+  icon: build/icon.ico

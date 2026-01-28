@@ -108,11 +108,37 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
   fpsTracker.tick();
 
   const data = message.data;
+
+  // Log telemetry data for debugging
+  console.log('[Telemetry]', {
+    traffic: data.traffic,
+    engineWarnings: data.engine_warnings,
+    onPitRoad: data.on_pit_road,
+    incidents: data.incidents,
+    waterTemp: data.temps?.water_c,
+    oilTemp: data.temps?.oil_c,
+    fuelLevel: data.fuel_level,
+    speed: data.speed_mps ? data.speed_mps * 3.6 : 0,
+    rpm: data.rpm,
+  });
+
+  // Only initialize event engine when car is actually moving
   if (!eventEngine) {
-    eventEngine = new LocalEventEngine(buildCapabilities(data), {
-      waterTemp: config.temperatures.water,
-      oilTemp: config.temperatures.oil,
-    });
+    const speedKph = data.speed_mps ? data.speed_mps * 3.6 : 0;
+    const rpm = data.rpm ?? 0;
+
+    // Wait until car is moving (speed > 5 kph OR rpm > 500)
+    if (speedKph > 5 || rpm > 500) {
+      console.log('[Service] 🚗 Car is moving (speed: ' + speedKph.toFixed(1) + ' kph, rpm: ' + rpm + ') - initializing EventEngine');
+      eventEngine = new LocalEventEngine(buildCapabilities(data), {
+        waterTemp: config.temperatures.water,
+        oilTemp: config.temperatures.oil,
+      });
+      console.log('[Service] ✅ EventEngine initialized - now processing events');
+    } else {
+      // Skip processing until car starts (no logging to avoid spam)
+      return;
+    }
   }
 
   const frame: TelemetryFrame = {
@@ -165,7 +191,32 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
 }
 
 function handleAdapterStatus(message: AdapterStatusMessage) {
+  const wasConnected = adapterStatus?.state === 'connected';
   adapterStatus = message;
+
+  // Reset event engine and clear messages when connecting
+  if (message.state === 'connected' && !wasConnected) {
+    console.log('[Service] Adapter connected - resetting state');
+    // Reset the event engine to start fresh (will be initialized when car moves)
+    eventEngine = null;
+    recentMessages = [];
+    router.reset(); // Clear cooldown cache
+
+    // Only emit connection message once
+    routeEvents([{
+      id: 'system.connected',
+      t: Date.now(),
+      category: 'SYSTEM',
+      severity: 'INFO',
+      priority: 5,
+      cooldownMs: 30000,
+      text: 'SimRacingCoach Conectado',
+      source: 'local',
+    }]);
+
+    console.log('[Service] Connection message emitted - waiting for car to move before processing events');
+  }
+
   if (message.state === 'error') {
     logger.error({ message }, 'adapter error');
   } else {
@@ -211,26 +262,32 @@ function resolvePythonCommand(): string | null {
 }
 
 function resolveAdapterCommand(adapterId: AdapterId) {
-  const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+  // In production (packaged with Electron), use ADAPTER_PATH from environment
+  const adapterBasePath = process.env.ADAPTER_PATH
+    ? process.env.ADAPTER_PATH
+    : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../apps/adapters');
+
+  console.log('[Service] Adapter base path:', adapterBasePath);
+  console.log('[Service] NODE_ENV:', process.env.NODE_ENV);
+  console.log('[Service] process.execPath:', process.execPath);
+
   if (adapterId === 'iracing') {
-    if (adapterId === 'iracing') {
-      return {
-        command: process.execPath,
-        args: [path.join(rootDir, 'apps/adapters/iracing-node/adapter.js')],
-      };
-    }
+    return {
+      command: process.execPath,
+      args: [path.join(adapterBasePath, 'iracing/adapter.mjs')],
+    };
   }
 
   if (adapterId === 'mock-iracing') {
     return {
       command: process.execPath,
-      args: [path.join(rootDir, 'apps/adapters/mock-iracing/adapter.js')],
+      args: [path.join(adapterBasePath, 'mock-iracing/adapter.js')],
     };
   }
 
   return {
     command: process.execPath,
-    args: [path.join(rootDir, 'apps/adapters/stub/adapter.js'), adapterId],
+    args: [path.join(adapterBasePath, 'stub/adapter.js'), adapterId],
   };
 }
 
@@ -270,7 +327,9 @@ async function startService() {
 }
 
 function routeEvents(events: LocalEvent[]) {
+  console.log('[RouteEvents] Routing', events.length, 'events:', events.map(e => e.text));
   const routed = router.route(events);
+  console.log('[RouteEvents] After router filter:', routed.length, 'events');
   for (const { event, shouldBarge } of routed) {
     speechQueue.enqueue(event, shouldBarge);
     pushRecent(event.text);
@@ -296,15 +355,18 @@ async function telemetryLoop() {
     const current = telemetryBuffer;
     telemetryBuffer = [];
 
-    const toSend = [...retryBuffer, ...current];
-    if (apiClient && toSend.length > 0) {
-      const ok = await apiClient.sendTelemetry(toSend);
-      if (ok) {
-        retryBuffer = [];
-      } else {
-        // Keep in retry buffer if failed, but cap it
-        retryBuffer = toSend.slice(-MAX_RETRY_BUFFER);
-        logger.warn({ count: retryBuffer.length }, 'telemetry send failed, buffering for retry');
+    // Only send to remote API if enabled
+    if (config.api.useRemoteApi) {
+      const toSend = [...retryBuffer, ...current];
+      if (apiClient && toSend.length > 0) {
+        const ok = await apiClient.sendTelemetry(toSend);
+        if (ok) {
+          retryBuffer = [];
+        } else {
+          // Keep in retry buffer if failed, but cap it
+          retryBuffer = toSend.slice(-MAX_RETRY_BUFFER);
+          logger.warn({ count: retryBuffer.length }, 'telemetry send failed, buffering for retry');
+        }
       }
     }
     await sleep(250); // Slightly slower loop to save CPU and handle batches better

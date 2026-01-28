@@ -33,6 +33,7 @@ const inputs = {
   language: document.getElementById('language-select'),
   apiUrl: document.getElementById('api-url'),
   apiToken: document.getElementById('api-token'),
+  useRemoteApi: document.getElementById('use-remote-api'),
   voiceName: document.getElementById('voice-name'),
   voiceVolume: document.getElementById('voice-volume'),
   volumeValue: document.getElementById('volume-value'),
@@ -135,6 +136,7 @@ async function loadConfig() {
   inputs.language.value = config.language ?? 'es-AR';
   inputs.apiUrl.value = config.api.url;
   inputs.apiToken.value = config.api.token ?? '';
+  inputs.useRemoteApi.checked = config.api.useRemoteApi ?? false;
 
   // Wait for voices to be populated then select the current one
   await populateVoices();
@@ -168,6 +170,10 @@ inputs.voiceVolume.addEventListener('input', () => {
 inputs.voiceRate.addEventListener('input', () => {
   if (inputs.rateValue) inputs.rateValue.textContent = inputs.voiceRate.value;
   window.api.updateConfig({ voice: { rate: Number(inputs.voiceRate.value) } });
+});
+inputs.useRemoteApi.addEventListener('change', () => {
+  console.log('[Renderer] useRemoteApi changed to:', inputs.useRemoteApi.checked);
+  window.api.updateConfig({ api: { useRemoteApi: inputs.useRemoteApi.checked } });
 });
 
 function formatStatusMessage(state, adapterLabel, running) {
@@ -257,6 +263,7 @@ form.addEventListener('submit', async (event) => {
     api: {
       url: inputs.apiUrl.value,
       token: inputs.apiToken.value,
+      useRemoteApi: inputs.useRemoteApi.checked,
     },
     voice: {
       voice: inputs.voiceName.value || undefined,
