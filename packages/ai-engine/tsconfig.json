@@ -4,7 +4,15 @@
         "outDir": "./dist",
         "rootDir": "./src",
         "declaration": true,
-        "declarationMap": true
+        "declarationMap": true,
+        "moduleResolution": "bundler",
+        "allowImportingTsExtensions": false,
+        "types": [
+            "node"
+        ],
+        "lib": [
+            "ES2022"
+        ]
     },
     "include": [
         "src/**/*"

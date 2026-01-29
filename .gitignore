@@ -47,3 +47,10 @@ screenshot.png
 # Temporary files
 *.tmp
 .cache/
+
+# AI Models (large files, downloaded on first run)
+packages/ai-engine/models/*.gguf
+packages/ai-engine/models/*.bin
+packages/ai-engine/models/*.onnx
+packages/ai-engine/models/*.json
+!packages/ai-engine/models/README.md
