@@ -53,12 +53,23 @@ export class AICoachingService {
     private frameBuffer: TelemetryFrame[] = [];
 
     private initialized: boolean = false;
+    private externalAgents: boolean = false;
 
-    constructor(config: Partial<AIServiceConfig> = {}) {
+    constructor(config: Partial<AIServiceConfig> = {}, externalLlm?: LlamaCppAgent, externalTts?: PiperAgent) {
         this.config = { ...DEFAULT_CONFIG, ...config };
 
-        this.llm = new LlamaCppAgent(this.config.llm);
-        this.tts = new PiperAgent(this.config.tts);
+        // Use external agents if provided, otherwise create new ones
+        if (externalLlm && externalTts) {
+            console.log('[AIService] Using external LLM and TTS agents');
+            this.llm = externalLlm;
+            this.tts = externalTts;
+            this.externalAgents = true;
+        } else {
+            console.log('[AIService] Creating new LLM and TTS agents');
+            this.llm = new LlamaCppAgent(this.config.llm);
+            this.tts = new PiperAgent(this.config.tts);
+            this.externalAgents = false;
+        }
     }
 
     /**
@@ -68,14 +79,20 @@ export class AICoachingService {
         console.log('[AIService] Initializing AI Coaching Service...');
 
         try {
-            // Start Llama.cpp server
-            console.log('[AIService] Starting Llama.cpp server...');
-            await this.llm.start();
-            this.llm.setLanguage(this.config.language.stt);
+            if (this.externalAgents) {
+                // External agents are already initialized, just mark as ready
+                console.log('[AIService] Using pre-initialized external agents');
+                this.llm.setLanguage(this.config.language.stt);
+            } else {
+                // Start Llama.cpp server
+                console.log('[AIService] Starting Llama.cpp server...');
+                await this.llm.start();
+                this.llm.setLanguage(this.config.language.stt);
 
-            // Initialize Piper
-            console.log('[AIService] Initializing Piper TTS...');
-            await this.tts.initialize();
+                // Initialize Piper
+                console.log('[AIService] Initializing Piper TTS...');
+                await this.tts.initialize();
+            }
 
             this.initialized = true;
             console.log('[AIService] ✓ AI Coaching Service initialized successfully');

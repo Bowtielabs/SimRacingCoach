@@ -256,10 +256,19 @@ export class AdapterSupervisor extends EventEmitter {
       if (!line) {
         continue;
       }
+
+      // DEBUG: Log first 200 chars of line to see what we're trying to parse
+      if (Math.random() < 0.01) { // Log 1% of lines
+        console.log('[Supervisor DEBUG] Parsing line:', line.substring(0, 200));
+      }
+
       try {
         const parsed = JSON.parse(line) as AdapterMessage;
         this.handleMessage(parsed);
       } catch (error) {
+        // DEBUG: Log parsing errors
+        console.error('[Supervisor ERROR] Failed to parse line:', line.substring(0, 100), String(error));
+
         this.emit(
           'log',
           {
@@ -287,6 +296,11 @@ export class AdapterSupervisor extends EventEmitter {
   }
 
   private handleMessage(message: AdapterMessage) {
+    // DEBUG: Log all messages to see what we're receiving
+    if (message.type === 'frame') {
+      console.log('[AdapterSupervisor] Received frame message, emitting...');
+    }
+
     if (message.type === 'status') {
       this.emitStatus(message);
       return;

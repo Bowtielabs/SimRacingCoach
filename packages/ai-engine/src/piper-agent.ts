@@ -48,16 +48,21 @@ export class PiperAgent {
 
     /**
      * Speak text using Piper
+     * @param speed - Speech speed multiplier (0.5 = slow, 1.0 = normal, 2.0 = fast)
      */
-    async speak(text: string, priority: 'normal' | 'urgent' = 'normal'): Promise<string> {
-        console.log(`[Piper] Speaking: "${text}" (${priority})`);
+    async speak(text: string, priority: 'normal' | 'urgent' = 'normal', speed: number = 1.0): Promise<string> {
+        console.log(`[Piper] Speaking: "${text}" (${priority}, speed: ${speed})`);
 
         const outputWav = path.join(__dirname, `../../../core/ai_engines/piper/output_${Date.now()}.wav`);
+
+        // Piper uses --length_scale for speed (inverse: lower = faster, higher = slower)
+        const lengthScale = 1.0 / speed;
 
         return new Promise((resolve, reject) => {
             const piper = spawn(PIPER_BIN_PATH, [
                 '--model', this.config.modelPath,
-                '--output_file', outputWav
+                '--output_file', outputWav,
+                '--length_scale', lengthScale.toFixed(2)
             ]);
 
             // Send text to stdin

@@ -1,0 +1,37 @@
+{
+    "app": {
+        "title": "SimRacing AI Coach"
+    },
+    "config": {
+        "simulator": "Simulator",
+        "language": "Language",
+        "volume": "Volume",
+        "speed": "Speed",
+        "testVoice": "Test Voice",
+        "run": "START COACHING",
+        "stop": "STOP"
+    },
+    "simulators": {
+        "iracing": "iRacing",
+        "acc": "Assetto Corsa Competizione",
+        "ac": "Assetto Corsa",
+        "rf2": "rFactor 2",
+        "ams2": "Automobilista 2"
+    },
+    "languages": {
+        "es": "Español",
+        "en": "English",
+        "pt": "Português",
+        "fr": "Français",
+        "it": "Italiano"
+    },
+    "status": {
+        "disconnected": "Disconnected",
+        "waiting": "Waiting for {{sim}}...",
+        "connected": "Connected to {{sim}}",
+        "running": "Coaching active"
+    },
+    "voice": {
+        "testMessage": "Hello, I'm your virtual SimRacing coach. I'm ready to help you improve your driving."
+    }
+}

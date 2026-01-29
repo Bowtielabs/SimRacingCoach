@@ -120,6 +120,11 @@ async function loop(sdk) {
                 log(`SessionFlags detected: ${data.session_flags_raw} (0x${data.session_flags_raw.toString(16).toUpperCase()})`);
             }
 
+            // DEBUG: Confirm we're emitting frames
+            if (data.speed_mps !== null && data.speed_mps !== undefined) {
+                log(`EMITTING FRAME - Speed: ${data.speed_mps} m/s`);
+            }
+
             emit({ type: 'frame', sim, ts: now, data });
         } catch (error) {
             if (connected) {

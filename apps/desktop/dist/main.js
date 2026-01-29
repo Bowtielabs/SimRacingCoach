@@ -82,8 +82,9 @@ async function getStatus() {
         }
         const data = await res.json();
         return {
-            state: data.adapterStatus?.state || 'disconnected',
-            sim: data.adapter?.id || 'unknown'
+            state: data.state || 'disconnected',
+            sim: data.sim || 'unknown',
+            details: data.details
         };
     }
     catch (err) {

@@ -208,24 +208,24 @@ export class LlamaCppAgent {
      * Build prompt from telemetry context
      */
     private buildPrompt(context: CoachingContext, userQuestion?: string): string {
-        let prompt = `Session: ${context.sessionType} at ${context.trackId} with ${context.carId}\n\n`;
+        let prompt = `Sesión: ${context.sessionType} en ${context.trackId} con ${context.carId}\n\n`;
 
-        prompt += `Telemetry:\n`;
-        prompt += `- Speed: ${Math.round(context.currentTelemetry.powertrain?.speedKph || 0)} km/h\n`;
+        prompt += `Telemetría:\n`;
+        prompt += `- Velocidad: ${Math.round(context.currentTelemetry.powertrain?.speedKph || 0)} km/h\n`;
         prompt += `- RPM: ${Math.round(context.currentTelemetry.powertrain?.rpm || 0)}\n`;
-        prompt += `- Throttle: ${Math.round((context.currentTelemetry.powertrain?.throttle || 0) * 100)}%\n`;
-        prompt += `- Brake: ${Math.round((context.currentTelemetry.powertrain?.brake || 0) * 100)}%\n`;
-        prompt += `- Gear: ${context.currentTelemetry.powertrain?.gear || 0}\n`;
+        prompt += `- Acelerador: ${Math.round((context.currentTelemetry.powertrain?.throttle || 0) * 100)}%\n`;
+        prompt += `- Freno: ${Math.round((context.currentTelemetry.powertrain?.brake || 0) * 100)}%\n`;
+        prompt += `- Marcha: ${context.currentTelemetry.powertrain?.gear || 0}\n`;
 
         if (context.currentTelemetry.temps) {
-            prompt += `- Water Temp: ${Math.round(context.currentTelemetry.temps.waterC || 0)}°C\n`;
-            prompt += `- Oil Temp: ${Math.round(context.currentTelemetry.temps.oilC || 0)}°C\n`;
+            prompt += `- Temp. Agua: ${Math.round(context.currentTelemetry.temps.waterC || 0)}°C\n`;
+            prompt += `- Temp. Aceite: ${Math.round(context.currentTelemetry.temps.oilC || 0)}°C\n`;
         }
 
         if (userQuestion) {
-            prompt += `\nDriver Question: "${userQuestion}"\n`;
+            prompt += `\nPregunta del piloto: "${userQuestion}"\n`;
         } else {
-            prompt += `\nProvide proactive coaching based on current data.\n`;
+            prompt += `\nProporcioná coaching proactivo basado en los datos actuales.\n`;
         }
 
         return prompt;

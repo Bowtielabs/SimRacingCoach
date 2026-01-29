@@ -14,8 +14,7 @@ let isRunning = false;
 const elements = {
   simulatorSelect: document.getElementById('simulator-select'),
   languageSelect: document.getElementById('language-select'),
-  volumeSlider: document.getElementById('volume-slider'),
-  volumeValue: document.getElementById('volume-value'),
+
   speedSlider: document.getElementById('speed-slider'),
   speedValue: document.getElementById('speed-value'),
   testVoiceBtn: document.getElementById('test-voice-btn'),
@@ -31,7 +30,7 @@ async function loadTranslations() {
 
   for (const lang of languages) {
     try {
-      const response = await fetch(`../src/i18n/${lang}.json`);
+      const response = await fetch(`./i18n/${lang}.json`);
       translations[lang] = await response.json();
     } catch (err) {
       console.error(`Failed to load ${lang} translations:`, err);
@@ -103,8 +102,6 @@ async function loadConfig() {
     elements.simulatorSelect.value = config.adapter?.id || 'iracing';
     currentLanguage = config.language?.split('-')[0] || 'es';
     elements.languageSelect.value = currentLanguage;
-    elements.volumeSlider.value = config.voice?.volume || 80;
-    elements.volumeValue.textContent = config.voice?.volume || 80;
 
     // Speed is stored as rate (-10 to +10), convert to multiplier (0.5 to 2.0)
     const rate = config.voice?.rate || 0;
@@ -123,20 +120,31 @@ function updateStatus(status) {
   elements.statusIndicator.className = 'status-indicator';
 
   const t = translations[currentLanguage];
-  if (!t) return;
+
+  // Fallback text if translations not loaded
+  const fallbackText = {
+    connected: `Conectado - ${status.sim || 'iRacing'}`,
+    running: 'Ejecutando',
+    disconnected: 'Desconectado',
+    waiting: 'Esperando...'
+  };
 
   switch (status.state) {
     case 'connected':
       elements.statusIndicator.classList.add('connected');
-      elements.statusText.textContent = t.status.connected.replace('{{sim}}', status.sim);
+      elements.statusText.textContent = t?.status?.connected?.replace('{{sim}}', status.sim) || fallbackText.connected;
       break;
     case 'running':
       elements.statusIndicator.classList.add('running');
-      elements.statusText.textContent = t.status.running;
+      elements.statusText.textContent = t?.status?.running || fallbackText.running;
+      break;
+    case 'waiting':
+      elements.statusIndicator.classList.add('running');
+      elements.statusText.textContent = t?.status?.waiting?.replace('{{sim}}', status.sim) || fallbackText.waiting;
       break;
     case 'disconnected':
     default:
-      elements.statusText.textContent = t.status.disconnected;
+      elements.statusText.textContent = t?.status?.disconnected || fallbackText.disconnected;
       break;
   }
 }
@@ -154,15 +162,6 @@ elements.simulatorSelect.addEventListener('change', () => {
 elements.languageSelect.addEventListener('change', async () => {
   const newLang = elements.languageSelect.value;
   await applyLanguage(newLang);
-});
-
-// Volume slider
-elements.volumeSlider.addEventListener('input', () => {
-  const value = elements.volumeSlider.value;
-  elements.volumeValue.textContent = value;
-  window.api.updateConfig({
-    voice: { volume: Number(value) }
-  });
 });
 
 // Speed slider
@@ -189,7 +188,6 @@ elements.testVoiceBtn.addEventListener('click', async () => {
 
     await window.api.testVoice(testMessage, {
       voice: 'ai-tts', // Use AI TTS instead of Windows
-      volume: Number(elements.volumeSlider.value),
       rate: Number(elements.speedSlider.value)
     });
 
@@ -240,16 +238,18 @@ elements.stopBtn.addEventListener('click', async () => {
 setInterval(async () => {
   try {
     const status = await window.api.getStatus();
+    console.log('[Status Poll]', status); // DEBUG
     updateStatus(status);
 
     // Update button states based on status
     if (status.state === 'disconnected' && isRunning) {
+      console.log('[Status Poll] Resetting to disconnected'); // DEBUG
       isRunning = false;
       elements.stopBtn.classList.add('hidden');
       elements.runBtn.classList.remove('hidden');
     }
   } catch (err) {
-    // Ignore polling errors
+    console.error('[Status Poll] Error:', err); // DEBUG
   }
 }, 2000);
 
