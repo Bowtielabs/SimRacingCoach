@@ -316,8 +316,8 @@ export class PatternAnalyzer {
      * Detect temperature spike
      */
     private detectTemperatureSpike(current: TelemetryFrame, recent: TelemetryFrame[]): Anomaly | null {
-        const currentWaterTemp = current.temperatures?.waterTemp || 0;
-        const avgWaterTemp = recent.reduce((sum, f) => sum + (f.temperatures?.waterTemp || 0), 0) / recent.length;
+        const currentWaterTemp = current.temps?.waterC || 0;
+        const avgWaterTemp = recent.reduce((sum, f) => sum + (f.temps?.waterC || 0), 0) / recent.length;
 
         const tempIncrease = currentWaterTemp - avgWaterTemp;
 
@@ -328,7 +328,7 @@ export class PatternAnalyzer {
                 severity: 'high',
                 description: `Temperatura del agua subió ${tempIncrease.toFixed(1)}°C`,
                 telemetrySnapshot: {
-                    temperatures: current.temperatures,
+                    temps: current.temps,
                     t: current.t
                 },
                 timestamp: current.t

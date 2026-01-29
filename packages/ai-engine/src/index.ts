@@ -10,6 +10,8 @@ export * from './types.js';
 export { LLMAgent } from './llm-agent.js';
 export { STTAgent } from './stt-agent.js';
 export { TTSAgent } from './tts-agent.js';
+export { LlamaCppAgent } from './llama-cpp-agent.js';
+export { PiperAgent } from './piper-agent.js';
 
 // Pattern Analysis
 export { PatternAnalyzer } from './pattern-analyzer.js';

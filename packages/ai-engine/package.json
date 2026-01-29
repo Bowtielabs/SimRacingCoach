@@ -1,26 +1,25 @@
 {
     "name": "@simracing/ai-engine",
     "version": "0.1.0",
-    "description": "AI-powered coaching engine with LLM, STT, and TTS",
     "type": "module",
-    "main": "dist/index.js",
-    "types": "dist/index.d.ts",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
     "scripts": {
         "build": "tsc -p tsconfig.json",
         "dev": "tsc -p tsconfig.json --watch",
-        "clean": "rm -rf dist"
+        "lint": "echo 'no lint configured'",
+        "format": "echo 'no format configured'"
     },
     "dependencies": {
         "@simracing/core": "workspace:*",
-        "node-llama-cpp": "^3.0.0-beta.43",
-        "@ricky0123/vad-node": "^0.0.19",
-        "onnxruntime-node": "^1.17.0",
-        "piper-tts": "^1.0.0",
-        "sqlite3": "^5.1.7",
         "p-queue": "^8.0.1"
     },
+    "optionalDependencies": {
+        "node-llama-cpp": "^3.15.1",
+        "onnxruntime-node": "^1.23.2"
+    },
     "devDependencies": {
-        "typescript": "^5.3.3",
-        "@types/node": "^20.11.0"
+        "@types/node": "^20.14.10",
+        "typescript": "^5.5.4"
     }
 }

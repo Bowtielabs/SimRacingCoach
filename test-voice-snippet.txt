@@ -1,0 +1,19 @@
+// Contenido completo simplificado del endpoint
+if (req.method === 'POST' && req.url === '/test-voice') {
+  try {
+    logger.info('Voice test requested');
+    const { PiperAgent } = await import('@simracing/ai-engine');
+    const piper = new PiperAgent();
+    await piper.initialize();
+    await piper.speak('Dale, che! Acá está el sistema de voz funcionando perfecto. Mandale con todo que el AI coach está listo para la pista!');
+    await piper.dispose();
+    
+    res.writeHead(200);
+    res.end(JSON.stringify({ success: true }));
+  } catch (error) {
+    logger.error({ error }, 'Voice test failed');
+    res.writeHead(500);
+    res.end(JSON.stringify({ error: String(error) }));
+  }
+  return;
+}

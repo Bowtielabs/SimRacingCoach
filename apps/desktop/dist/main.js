@@ -75,11 +75,21 @@ async function controlService(endpoint, body) {
     }
 }
 async function getStatus() {
-    const res = await fetch(`${serviceUrl}/status`);
-    if (!res.ok) {
-        throw new Error('Service offline');
+    try {
+        const res = await fetch(`${serviceUrl}/status`);
+        if (!res.ok) {
+            return { state: 'disconnected' };
+        }
+        const data = await res.json();
+        return {
+            state: data.adapterStatus?.state || 'disconnected',
+            sim: data.adapter?.id || 'unknown'
+        };
     }
-    return res.json();
+    catch (err) {
+        console.error('[Main] getStatus failed:', err);
+        return { state: 'disconnected' };
+    }
 }
 function registerHotkeys() {
     globalShortcut.unregisterAll();
@@ -219,7 +229,14 @@ app.whenReady().then(async () => {
     ipcMain.handle('service:focus', async () => controlService('/focus'));
     ipcMain.handle('voice:test', async (_event, text, options) => {
         console.log(`[Main] IPC voice:test received: "${text}"`, options);
-        await controlService('/test-voice', { text, ...options });
+        // If AI TTS is requested, use service test-voice endpoint
+        if (options?.voice === 'ai-tts') {
+            await controlService('/test-voice', { text, useAI: true });
+        }
+        else {
+            // Use Windows TTS from service
+            await controlService('/test-voice', { text });
+        }
     });
     ipcMain.handle('config:path', () => getConfigPath());
     app.on('activate', () => {

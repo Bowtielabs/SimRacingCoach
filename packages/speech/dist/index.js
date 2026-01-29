@@ -80,7 +80,7 @@ export class SpeechQueue {
         // Explicitly use the selected voice, fallback only if truly empty/null
         const voiceToUse = (this.options.voice && this.options.voice.trim() !== '')
             ? this.options.voice
-            : 'Microsoft Sabina Desktop';
+            : 'Microsoft Raul Desktop';
         const speed = 1 + (this.options.rate * 0.1);
         console.log(`[SpeechQueue] === SYNTHESIS START ===`);
         console.log(`[SpeechQueue] Text: "${next.text}"`);

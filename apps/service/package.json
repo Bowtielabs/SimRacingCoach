@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@simracing/adapters-runtime": "workspace:*",
+    "@simracing/ai-engine": "workspace:*",
     "@simracing/api-client": "workspace:*",
     "@simracing/config": "workspace:*",
     "@simracing/core": "workspace:*",

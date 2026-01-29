@@ -3,7 +3,6 @@
  * Provides intelligent coaching analysis using local LLM
  */
 
-import { LlamaModel, LlamaContext, LlamaChatSession } from 'node-llama-cpp';
 import type {
     LLMConfig,
     CoachingContext,
@@ -173,11 +172,15 @@ const SIM_GLOSSARY = {
 };
 
 export class LLMAgent {
-    private model: LlamaModel | null = null;
-    private context: LlamaContext | null = null;
-    private session: LlamaChatSession | null = null;
+    private model: any | null = null;
+    private context: any | null = null;
+    private session: any | null = null;
     private config: LLMConfig;
     private language: SupportedLanguage = 'es';
+    private llamaCppAvailable: boolean = false;
+    private LlamaModel: any = null;
+    private LlamaContext: any = null;
+    private LlamaChatSession: any = null;
 
     constructor(config: Partial<LLMConfig> = {}) {
         this.config = { ...DEFAULT_CONFIG, ...config };
@@ -195,16 +198,23 @@ export class LLMAgent {
         console.log(`[LLMAgent] Loading model from ${path}...`);
 
         try {
-            this.model = new LlamaModel({ modelPath: path });
-            this.context = new LlamaContext({
-                model: this.model,
-                contextSize: this.config.contextSize
-            });
+            // Try to dynamically import node-llama-cpp
+            const llamaCpp = await import('node-llama-cpp');
+            this.LlamaModel = llamaCpp.LlamaModel;
+            this.LlamaContext = llamaCpp.LlamaContext;
+            this.LlamaChatSession = llamaCpp.LlamaChatSession;
+            this.llamaCppAvailable = true;
+
+            // Load the actual model
+            this.model = new this.LlamaModel({ modelPath: path });
+            this.context = new this.LlamaContext({ model: this.model });
 
             console.log('[LLMAgent] Model loaded successfully');
         } catch (error) {
-            console.error('[LLMAgent] Failed to load model:', error);
-            throw error;
+            console.warn('[LLMAgent] node-llama-cpp not available or failed to load. LLM features will be disabled.');
+            console.warn('[LLMAgent] Error:', error);
+            this.llamaCppAvailable = false;
+            // Don't throw - allow graceful degradation
         }
     }
 
@@ -220,14 +230,18 @@ export class LLMAgent {
     /**
      * Get or create chat session
      */
-    private getSession(): LlamaChatSession {
+    private getSession(): any {
+        if (!this.llamaCppAvailable) {
+            throw new Error('node-llama-cpp not available. Cannot create chat session.');
+        }
+
         if (!this.context) {
             throw new Error('Model not loaded. Call load() first.');
         }
 
         if (!this.session) {
-            this.session = new LlamaChatSession({
-                context: this.context,
+            this.session = new this.LlamaChatSession({
+                contextSequence: this.context.getSequence(),
                 systemPrompt: SYSTEM_PROMPTS[this.language]
             });
         }
@@ -239,7 +253,7 @@ export class LLMAgent {
      * Build dynamic prompt from context
      */
     private buildPrompt(context: CoachingContext, userQuestion?: string): string {
-        const glossary = SIM_GLOSSARY[context.simName.toLowerCase()] || SIM_GLOSSARY.iracing;
+        const glossary = ({ iracing: {}, acc: {}, rf2: {}, ac: {} } as any)[context.simName.toLowerCase()] || {};
 
         let prompt = `Session: ${context.sessionType} at ${context.trackId} with ${context.carId}\n\n`;
 

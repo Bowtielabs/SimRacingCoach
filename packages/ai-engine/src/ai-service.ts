@@ -1,25 +1,21 @@
 /**
- * AI Coaching Service
- * Main service that orchestrates LLM, STT, TTS, and Pattern Analysis
+ * AI Coaching Service - Standalone Binary Architecture
+ * Orchestrates Llama.cpp, Piper TTS via child processes
  */
 
 import type { TelemetryFrame } from '@simracing/core';
-import { LLMAgent } from './llm-agent.js';
-import { STTAgent } from './stt-agent.js';
-import { TTSAgent } from './tts-agent.js';
-import { PatternAnalyzer } from './pattern-analyzer.js';
-import { ModelManager } from './model-manager.js';
+import { LlamaCppAgent } from './llama-cpp-agent.js';
+import { PiperAgent } from './piper-agent.js';
 import type {
     AIServiceConfig,
     CoachingContext,
     SessionContext,
-    SupportedLanguage,
-    DrivingPattern
+    SupportedLanguage
 } from './types.js';
 
 const DEFAULT_CONFIG: AIServiceConfig = {
     enabled: true,
-    mode: 'hybrid', // Use both rules and AI
+    mode: 'ai', // AI-only mode
     language: {
         stt: 'es',
         tts: 'es'
@@ -34,7 +30,7 @@ const DEFAULT_CONFIG: AIServiceConfig = {
     stt: {
         modelPath: '',
         language: 'es',
-        vadEnabled: true
+        vadEnabled: false // Not implemented yet
     },
     tts: {
         modelPath: '',
@@ -43,121 +39,68 @@ const DEFAULT_CONFIG: AIServiceConfig = {
         speed: 1.0,
         volume: 0.8
     },
-    analysisInterval: 10, // seconds
-    voiceInputMode: 'vad' // Always listening with VAD
+    analysisInterval: 5, // Analyze every 5 seconds
+    voiceInputMode: 'push-to-talk'
 };
 
 export class AICoachingService {
     private config: AIServiceConfig;
-    private llm: LLMAgent;
-    private stt: STTAgent;
-    private tts: TTSAgent;
-    private analyzer: PatternAnalyzer;
-    private modelManager: ModelManager;
+    private llm: LlamaCppAgent;
+    private tts: PiperAgent;
 
     private sessionContext: SessionContext | null = null;
     private lastAnalysisTime: number = 0;
     private frameBuffer: TelemetryFrame[] = [];
-    private conversationHistory: any[] = [];
 
     private initialized: boolean = false;
 
     constructor(config: Partial<AIServiceConfig> = {}) {
         this.config = { ...DEFAULT_CONFIG, ...config };
 
-        this.llm = new LLMAgent(this.config.llm);
-        this.stt = new STTAgent(this.config.stt);
-        this.tts = new TTSAgent(this.config.tts);
-        this.analyzer = new PatternAnalyzer();
-        this.modelManager = new ModelManager();
-
-        // Set up event listeners
-        this.setupEventListeners();
+        this.llm = new LlamaCppAgent(this.config.llm);
+        this.tts = new PiperAgent(this.config.tts);
     }
 
     /**
-     * Setup event listeners for agents
+     * Initialize the service - starts child processes
      */
-    private setupEventListeners(): void {
-        // STT events
-        this.stt.on('event', async (event) => {
-            if (event.type === 'transcription') {
-                await this.handleVoiceInput(event.result.text);
-            }
-        });
-
-        // TTS events
-        this.tts.on('event', (event) => {
-            console.log('[AIService] TTS Event:', event.type);
-        });
-    }
-
-    /**
-     * Initialize the service - download models if needed
-     */
-    async initialize(onProgress?: (progress: any) => void): Promise<void> {
+    async initialize(): Promise<void> {
         console.log('[AIService] Initializing AI Coaching Service...');
 
-        // Check and download models
-        const statuses = await this.modelManager.checkModels();
-        const missing = statuses.filter(s => !s.installed || !s.verified);
+        try {
+            // Start Llama.cpp server
+            console.log('[AIService] Starting Llama.cpp server...');
+            await this.llm.start();
+            this.llm.setLanguage(this.config.language.stt);
 
-        if (missing.length > 0) {
-            console.log(`[AIService] Downloading ${missing.length} missing models...`);
-            await this.modelManager.downloadMissing(onProgress);
+            // Initialize Piper
+            console.log('[AIService] Initializing Piper TTS...');
+            await this.tts.initialize();
+
+            this.initialized = true;
+            console.log('[AIService] ✓ AI Coaching Service initialized successfully');
+        } catch (error) {
+            console.error('[AIService] Failed to initialize:', error);
+            throw error;
         }
-
-        // Get model paths
-        const llmPath = await this.modelManager.getModelPathIfInstalled('llama-3.2-1b-q4');
-        const sttPath = await this.modelManager.getModelPathIfInstalled('whisper-tiny-multilingual');
-        const ttsPath = await this.modelManager.getModelPathIfInstalled('piper-es-ar');
-
-        if (!llmPath || !sttPath || !ttsPath) {
-            throw new Error('Required models not found after download');
-        }
-
-        // Initialize agents
-        console.log('[AIService] Loading LLM...');
-        await this.llm.load(llmPath);
-        this.llm.setLanguage(this.config.language.stt);
-
-        console.log('[AIService] Loading STT...');
-        await this.stt.initialize(sttPath);
-
-        console.log('[AIService] Loading TTS...');
-        await this.tts.initialize(ttsPath);
-
-        this.initialized = true;
-        console.log('[AIService] AI Coaching Service initialized successfully');
     }
 
     /**
-     * Start session with context
+     * Start AI coaching session
      */
     startSession(context: SessionContext): void {
         this.sessionContext = context;
-        this.analyzer.setSessionContext(context);
         this.frameBuffer = [];
-        this.conversationHistory = [];
         this.lastAnalysisTime = 0;
 
-        console.log(`[AIService] Started session: ${context.simName} at ${context.trackId}`);
-
-        // Start voice input if enabled
-        if (this.config.voiceInputMode === 'vad') {
-            this.stt.startListening();
-        }
+        console.log(`[AIService] Started AI coaching session: ${context.simName} at ${context.trackId}`);
     }
 
     /**
      * End current session
      */
     endSession(): void {
-        this.stt.stopListening();
         this.sessionContext = null;
-        this.analyzer.reset();
-        this.llm.resetSession();
-
         console.log('[AIService] Session ended');
     }
 
@@ -171,33 +114,24 @@ export class AICoachingService {
 
         // Add to buffer
         this.frameBuffer.push(frame);
-        if (this.frameBuffer.length > 600) { // ~30 seconds at 20fps
+        if (this.frameBuffer.length > 200) { // ~10 seconds at 20fps
             this.frameBuffer.shift();
         }
-
-        // Analyze patterns in real-time
-        const patterns = this.analyzer.analyzeFrame(frame);
 
         // Check if it's time for AI analysis
         const now = Date.now();
         const timeSinceLastAnalysis = (now - this.lastAnalysisTime) / 1000;
 
         if (timeSinceLastAnalysis >= this.config.analysisInterval) {
-            await this.runAIAnalysis(frame, patterns);
+            await this.runAIAnalysis(frame);
             this.lastAnalysisTime = now;
-        }
-
-        // Check for urgent patterns that need immediate alert
-        const urgentPattern = patterns.find(p => p.severity === 'high');
-        if (urgentPattern) {
-            await this.provideUrgentCoaching(urgentPattern, frame);
         }
     }
 
     /**
-     * Run AI analysis on current state
+     * Run AI analysis on current telemetry
      */
-    private async runAIAnalysis(frame: TelemetryFrame, patterns: DrivingPattern[]): Promise<void> {
+    private async runAIAnalysis(frame: TelemetryFrame): Promise<void> {
         if (!this.sessionContext) return;
 
         const context: CoachingContext = {
@@ -206,132 +140,34 @@ export class AICoachingService {
             carId: this.sessionContext.carId,
             sessionType: this.sessionContext.sessionType,
             currentTelemetry: frame,
-            detectedPatterns: patterns,
-            conversationHistory: this.conversationHistory,
+            detectedPatterns: [], // AI does its own pattern detection
+            conversationHistory: [],
             language: this.config.language.stt
         };
 
         try {
+            console.log('[AIService] Running AI analysis...');
             const insight = await this.llm.analyze(context);
 
             // Speak the insight
-            await this.tts.speak(insight.text, insight.priority === 'urgent' ? 'urgent' : 'normal');
-
-            // Add to conversation history
-            this.conversationHistory.push({
-                role: 'assistant',
-                content: insight.text,
-                timestamp: Date.now()
-            });
-
-            // Keep history limited
-            if (this.conversationHistory.length > 20) {
-                this.conversationHistory.shift();
-            }
+            console.log('[AIService] AI says:', insight.text);
+            await this.tts.speak(insight.text, 'normal');
         } catch (error) {
-            console.error('[AIService] Analysis failed:', error);
+            console.error('[AIService] AI analysis failed:', error);
         }
     }
 
     /**
-     * Provide urgent coaching without AI (faster)
-     */
-    private async provideUrgentCoaching(pattern: DrivingPattern, frame: TelemetryFrame): Promise<void> {
-        // Interrupt current speech for urgent alerts
-        await this.tts.interrupt();
-        await this.tts.speak(pattern.recommendation, 'urgent');
-    }
-
-    /**
-     * Handle voice input from driver
-     */
-    private async handleVoiceInput(text: string): Promise<void> {
-        if (!this.sessionContext) {
-            console.log('[AIService] No active session, ignoring voice input');
-            return;
-        }
-
-        console.log(`[AIService] Voice input: "${text}"`);
-
-        // Add to conversation history
-        this.conversationHistory.push({
-            role: 'user',
-            content: text,
-            timestamp: Date.now()
-        });
-
-        // Get current frame
-        const currentFrame = this.frameBuffer[this.frameBuffer.length - 1];
-        if (!currentFrame) return;
-
-        // Build context
-        const context: CoachingContext = {
-            simName: this.sessionContext.simName,
-            trackId: this.sessionContext.trackId,
-            carId: this.sessionContext.carId,
-            sessionType: this.sessionContext.sessionType,
-            currentTelemetry: currentFrame,
-            detectedPatterns: this.analyzer.getActivePatterns(),
-            conversationHistory: this.conversationHistory,
-            language: this.config.language.stt
-        };
-
-        try {
-            // Get LLM response
-            const response = await this.llm.answerQuestion(text, context);
-
-            // Speak response
-            await this.tts.speak(response, 'normal');
-
-            // Add to history
-            this.conversationHistory.push({
-                role: 'assistant',
-                content: response,
-                timestamp: Date.now()
-            });
-        } catch (error) {
-            console.error('[AIService] Voice input handling failed:', error);
-        }
-    }
-
-    /**
-     * Manually trigger push-to-talk
-     */
-    async startPushToTalk(): Promise<void> {
-        if (this.config.voiceInputMode === 'push-to-talk') {
-            await this.stt.startListening();
-        }
-    }
-
-    /**
-     * Stop push-to-talk
-     */
-    async stopPushToTalk(): Promise<void> {
-        if (this.config.voiceInputMode === 'push-to-talk') {
-            await this.stt.stopListening();
-        }
-    }
-
-    /**
-     * Change language
+     * Set language
      */
     setLanguage(language: SupportedLanguage): void {
         this.config.language.stt = language;
         this.config.language.tts = language;
 
         this.llm.setLanguage(language);
-        this.stt.setLanguage(language);
         this.tts.setLanguage(language);
 
         console.log(`[AIService] Language changed to: ${language}`);
-    }
-
-    /**
-     * Set coaching mode
-     */
-    setMode(mode: 'rules' | 'ai' | 'hybrid'): void {
-        this.config.mode = mode;
-        console.log(`[AIService] Mode changed to: ${mode}`);
     }
 
     /**
@@ -341,20 +177,17 @@ export class AICoachingService {
         return {
             initialized: this.initialized,
             sessionActive: this.sessionContext !== null,
-            mode: this.config.mode,
-            language: this.config.language,
-            queueLength: this.tts.getQueueLength(),
-            isSpeaking: this.tts.isSpeaking()
+            mode: 'ai',
+            language: this.config.language
         };
     }
 
     /**
-     * Cleanup
+     * Cleanup - stop child processes
      */
     async dispose(): Promise<void> {
-        await this.stt.dispose();
+        await this.llm.stop();
         await this.tts.dispose();
-        await this.llm.unload();
 
         this.initialized = false;
         console.log('[AIService] Disposed');

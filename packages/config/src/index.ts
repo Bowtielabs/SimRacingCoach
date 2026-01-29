@@ -69,7 +69,7 @@ export const defaultConfig: AppConfig = {
     useRemoteApi: false,  // Disabled by default - local coaching only
   },
   voice: {
-    voice: 'Microsoft Sabina Desktop',
+    voice: 'Microsoft Raul Desktop',
     volume: 80,
     rate: 0,
   },
@@ -93,7 +93,7 @@ export const defaultConfig: AppConfig = {
   },
   ai: {
     enabled: false,  // Disabled by default - opt-in feature
-    mode: 'hybrid' as const, // Rules + AI
+    mode: 'rules' as const, // Rules-based coaching (AI deps are optional)
     language: 'es' as const, // Spanish default
     voiceInput: false, // Disabled by default
     voiceInputMode: 'vad' as const, // Voice activity detection

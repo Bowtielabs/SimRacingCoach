@@ -8,7 +8,11 @@ import path from 'path';
 import { createWriteStream } from 'fs';
 import { createHash } from 'crypto';
 import { pipeline } from 'stream/promises';
+import { fileURLToPath } from 'url';
 import type { ModelSpec, ModelStatus, DownloadProgress } from './types.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const MODELS_DIR = path.join(__dirname, '../models');
 
@@ -201,9 +205,15 @@ export class ModelManager {
                 }
             }
 
-            // Write all chunks
-            const buffer = Buffer.concat(chunks);
-            await fs.writeFile(modelPath, buffer);
+            // Write all chunks - combine Uint8Arrays
+            const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+            const combined = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const chunk of chunks) {
+                combined.set(chunk, offset);
+                offset += chunk.length;
+            }
+            await fs.writeFile(modelPath, combined);
 
             console.log(`[ModelManager] Download complete: ${model.name}`);
         } catch (error) {

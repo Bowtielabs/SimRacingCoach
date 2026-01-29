@@ -6,8 +6,9 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "dev": "concurrently -k -n build,app -c yellow,cyan \"tsc -p tsconfig.json -w\" \"wait-on dist/main.js && electron dist/main.js\"",
-    "build": "tsc -p tsconfig.json",
+    "dev": "pnpm run copy-public && concurrently -k -n build,app -c yellow,cyan \"tsc -p tsconfig.json -w\" \"wait-on dist/main.js && electron dist/main.js\"",
+    "build": "tsc -p tsconfig.json && pnpm run copy-public",
+    "copy-public": "node -e \"require('fs').cpSync('public', 'dist/public', {recursive: true})\"",
     "build:service": "node scripts/bundle-service.js",
     "package": "electron-builder --config electron-builder.yml",
     "dist": "pnpm build && pnpm build:service && pnpm package",
