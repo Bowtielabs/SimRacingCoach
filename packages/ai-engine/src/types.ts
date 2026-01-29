@@ -201,8 +201,8 @@ export interface SessionContext {
 // Exports
 // ============================================================================
 
-export * from './llm-agent';
-export * from './stt-agent';
-export * from './tts-agent';
-export * from './pattern-analyzer';
-export * from './model-manager';
+export * from './llm-agent.js';
+export * from './stt-agent.js';
+export * from './tts-agent.js';
+export * from './pattern-analyzer.js';
+export * from './model-manager.js';

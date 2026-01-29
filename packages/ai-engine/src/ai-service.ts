@@ -4,18 +4,18 @@
  */
 
 import type { TelemetryFrame } from '@simracing/core';
-import { LLMAgent } from './llm-agent';
-import { STTAgent } from './stt-agent';
-import { TTSAgent } from './tts-agent';
-import { PatternAnalyzer } from './pattern-analyzer';
-import { ModelManager } from './model-manager';
+import { LLMAgent } from './llm-agent.js';
+import { STTAgent } from './stt-agent.js';
+import { TTSAgent } from './tts-agent.js';
+import { PatternAnalyzer } from './pattern-analyzer.js';
+import { ModelManager } from './model-manager.js';
 import type {
     AIServiceConfig,
     CoachingContext,
     SessionContext,
     SupportedLanguage,
     DrivingPattern
-} from './types';
+} from './types.js';
 
 const DEFAULT_CONFIG: AIServiceConfig = {
     enabled: true,

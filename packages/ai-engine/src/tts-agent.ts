@@ -6,7 +6,7 @@
 import { EventEmitter } from 'events';
 import PQueue from 'p-queue';
 import { randomUUID } from 'crypto';
-import type { TTSConfig, TTSQueueItem, TTSEvent, SupportedLanguage } from './types';
+import type { TTSConfig, TTSQueueItem, TTSEvent, SupportedLanguage } from './types.js';
 
 const DEFAULT_CONFIG: TTSConfig = {
     modelPath: '',

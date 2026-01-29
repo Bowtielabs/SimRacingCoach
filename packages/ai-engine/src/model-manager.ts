@@ -8,7 +8,7 @@ import path from 'path';
 import { createWriteStream } from 'fs';
 import { createHash } from 'crypto';
 import { pipeline } from 'stream/promises';
-import type { ModelSpec, ModelStatus, DownloadProgress } from './types';
+import type { ModelSpec, ModelStatus, DownloadProgress } from './types.js';
 
 const MODELS_DIR = path.join(__dirname, '../models');
 

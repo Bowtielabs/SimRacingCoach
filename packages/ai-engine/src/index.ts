@@ -4,18 +4,18 @@
  */
 
 // Types
-export * from './types';
+export * from './types.js';
 
 // Agents
-export { LLMAgent } from './llm-agent';
-export { STTAgent } from './stt-agent';
-export { TTSAgent } from './tts-agent';
+export { LLMAgent } from './llm-agent.js';
+export { STTAgent } from './stt-agent.js';
+export { TTSAgent } from './tts-agent.js';
 
 // Pattern Analysis
-export { PatternAnalyzer } from './pattern-analyzer';
+export { PatternAnalyzer } from './pattern-analyzer.js';
 
 // Model Management
-export { ModelManager, AVAILABLE_MODELS } from './model-manager';
+export { ModelManager, AVAILABLE_MODELS } from './model-manager.js';
 
 // Main service
-export { AICoachingService } from './ai-service';
+export { AICoachingService } from './ai-service.js';

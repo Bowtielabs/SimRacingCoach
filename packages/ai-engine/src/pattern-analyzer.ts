@@ -4,7 +4,7 @@
  */
 
 import type { TelemetryFrame } from '@simracing/core';
-import type { DrivingPattern, Anomaly, PatternType, SessionContext } from './types';
+import type { DrivingPattern, Anomaly, PatternType, SessionContext } from './types.js';
 
 interface PatternHistory {
     type: PatternType;

@@ -10,7 +10,7 @@ import type {
     CoachingInsight,
     ConversationMessage,
     SupportedLanguage
-} from './types';
+} from './types.js';
 
 const DEFAULT_CONFIG: LLMConfig = {
     modelPath: '',

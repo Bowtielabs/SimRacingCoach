@@ -4,7 +4,7 @@
  */
 
 import { EventEmitter } from 'events';
-import type { STTConfig, TranscriptionResult, STTEvent, SupportedLanguage } from './types';
+import type { STTConfig, TranscriptionResult, STTEvent, SupportedLanguage } from './types.js';
 
 const DEFAULT_CONFIG: STTConfig = {
     modelPath: '',
