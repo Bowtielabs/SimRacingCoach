@@ -111,6 +111,28 @@ export declare const configSchema: z.ZodObject<{
             critical: number;
         };
     }>;
+    ai: z.ZodOptional<z.ZodObject<{
+        enabled: z.ZodBoolean;
+        mode: z.ZodEnum<["rules", "ai", "hybrid"]>;
+        language: z.ZodEnum<["es", "en", "pt", "fr", "it"]>;
+        voiceInput: z.ZodBoolean;
+        voiceInputMode: z.ZodEnum<["push-to-talk", "vad"]>;
+        analysisInterval: z.ZodNumber;
+    }, "strip", z.ZodTypeAny, {
+        language: "es" | "en" | "pt" | "fr" | "it";
+        enabled: boolean;
+        mode: "rules" | "ai" | "hybrid";
+        voiceInput: boolean;
+        voiceInputMode: "push-to-talk" | "vad";
+        analysisInterval: number;
+    }, {
+        language: "es" | "en" | "pt" | "fr" | "it";
+        enabled: boolean;
+        mode: "rules" | "ai" | "hybrid";
+        voiceInput: boolean;
+        voiceInputMode: "push-to-talk" | "vad";
+        analysisInterval: number;
+    }>>;
     debug: z.ZodObject<{
         telemetryDump: z.ZodBoolean;
     }, "strip", z.ZodTypeAny, {
@@ -160,6 +182,14 @@ export declare const configSchema: z.ZodObject<{
     debug: {
         telemetryDump: boolean;
     };
+    ai?: {
+        language: "es" | "en" | "pt" | "fr" | "it";
+        enabled: boolean;
+        mode: "rules" | "ai" | "hybrid";
+        voiceInput: boolean;
+        voiceInputMode: "push-to-talk" | "vad";
+        analysisInterval: number;
+    } | undefined;
 }, {
     adapter: {
         id: string;
@@ -202,6 +232,14 @@ export declare const configSchema: z.ZodObject<{
     debug: {
         telemetryDump: boolean;
     };
+    ai?: {
+        language: "es" | "en" | "pt" | "fr" | "it";
+        enabled: boolean;
+        mode: "rules" | "ai" | "hybrid";
+        voiceInput: boolean;
+        voiceInputMode: "push-to-talk" | "vad";
+        analysisInterval: number;
+    } | undefined;
 }>;
 export type AppConfig = z.infer<typeof configSchema>;
 export declare const defaultConfig: AppConfig;

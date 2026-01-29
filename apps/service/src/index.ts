@@ -31,6 +31,7 @@ import {
 } from '@simracing/core';
 import { createLogger, FpsTracker } from '@simracing/diagnostics';
 import { SpeechQueue, SpeechOptions } from '@simracing/speech';
+import { AICoachingService } from '@simracing/ai-engine';
 
 const configPath = getConfigPath();
 let config = loadConfig(configPath);
@@ -66,6 +67,7 @@ let apiStatus: 'online' | 'offline' = 'offline';
 let recentMessages: string[] = [];
 let sessionId = 'local-session';
 let isMuted = false;
+let aiService: AICoachingService | null = null;
 
 function pushRecent(message: string) {
   recentMessages.unshift(message);
@@ -198,11 +200,21 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
     engineWarnings: typeof data.engine_warnings === 'number' ? data.engine_warnings : undefined,
   };
 
-  if (eventEngine) {
-    const localEvents = eventEngine
-      .update(frame)
-      .filter((event) => config.filters[event.category]);
-    routeEvents(localEvents);
+  // Process with rule-based engine if enabled
+  if (config.ai?.mode !== 'ai') { // rules or hybrid mode
+    if (eventEngine) {
+      const localEvents = eventEngine
+        .update(frame)
+        .filter((event) => config.filters[event.category]);
+      routeEvents(localEvents);
+    }
+  }
+
+  // Process with AI if enabled  
+  if (config.ai?.enabled && aiService) {
+    aiService.processFrame(frame).catch((err: Error) => {
+      logger.error({ err }, 'AI processing failed');
+    });
   }
 
   telemetryBuffer.push(frame);
@@ -219,6 +231,28 @@ function handleAdapterStatus(message: AdapterStatusMessage) {
     eventEngine = null;
     recentMessages = [];
     router.reset(); // Clear cooldown cache
+
+    // Start AI session if enabled
+    if (config.ai?.enabled && aiService) {
+      try {
+        aiService.startSession({
+          sessionId,
+          startTime: Date.now(),
+          simName: config.adapter.id,
+          trackId: 'unknown', // TODO: Get from adapter
+          carId: 'unknown', // TODO: Get from adapter
+          sessionType: 'practice',
+          totalLaps: 0,
+          currentLap: 0,
+          bestLapTime: null,
+          averageLapTime: null,
+          consistency: 0
+        });
+        console.log('[Service] AI session started');
+      } catch (err) {
+        logger.error({ err }, 'Failed to start AI session');
+      }
+    }
 
     // Only emit connection message once
     routeEvents([{

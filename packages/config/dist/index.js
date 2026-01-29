@@ -40,6 +40,14 @@ export const configSchema = z.object({
         water: thresholdsSchema,
         oil: thresholdsSchema,
     }),
+    ai: z.object({
+        enabled: z.boolean(),
+        mode: z.enum(['rules', 'ai', 'hybrid']),
+        language: z.enum(['es', 'en', 'pt', 'fr', 'it']),
+        voiceInput: z.boolean(),
+        voiceInputMode: z.enum(['push-to-talk', 'vad']),
+        analysisInterval: z.number().min(5).max(60), // seconds
+    }).optional(),
     debug: z.object({
         telemetryDump: z.boolean(),
     }),
@@ -76,6 +84,14 @@ export const defaultConfig = {
     temperatures: {
         water: { warning: 110, critical: 120 },
         oil: { warning: 110, critical: 120 },
+    },
+    ai: {
+        enabled: false, // Disabled by default - opt-in feature
+        mode: 'hybrid', // Rules + AI
+        language: 'es', // Spanish default
+        voiceInput: false, // Disabled by default
+        voiceInputMode: 'vad', // Voice activity detection
+        analysisInterval: 10, // Every 10 seconds
     },
     debug: {
         telemetryDump: true,
@@ -119,6 +135,7 @@ export function updateConfig(partial, configPath = getConfigPath()) {
             water: { ...current.temperatures.water, ...partial.temperatures?.water },
             oil: { ...current.temperatures.oil, ...partial.temperatures?.oil },
         },
+        ai: { ...current.ai, ...partial.ai },
         debug: { ...current.debug, ...partial.debug },
     };
     const validated = configSchema.parse(next);
