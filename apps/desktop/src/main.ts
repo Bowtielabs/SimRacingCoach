@@ -24,7 +24,8 @@ function createSplashWindow() {
     }
   });
 
-  splashWindow.loadFile(path.join(__dirname, 'public/splash.html'));
+  const appPath = app.getAppPath();
+  splashWindow.loadFile(path.join(appPath, 'public/splash.html'));
   splashWindow.center();
 }
 
@@ -52,7 +53,9 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'public/index.html'));
+  // Use app.getAppPath() to work in both dev and production
+  const appPath = app.getAppPath();
+  mainWindow.loadFile(path.join(appPath, 'public/index.html'));
 
 
   // Show main window when ready
@@ -138,7 +141,9 @@ async function startService() {
     const env = {
       ...process.env,
       ADAPTER_PATH: adapterPath,
-      NODE_ENV: 'production'
+      NODE_ENV: 'production',
+      // Performance optimization: Use more cores for I/O operations
+      UV_THREADPOOL_SIZE: '8'
     };
 
     // Use spawn instead of fork for packaged app

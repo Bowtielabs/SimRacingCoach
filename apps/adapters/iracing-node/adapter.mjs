@@ -2,7 +2,7 @@
 import { IRacingSDK } from 'irsdk-node';
 
 const sim = 'iracing';
-const TIMEOUT = Math.floor((1 / 60) * 1000); // 60fps = ~16ms
+const TIMEOUT = 50; // 20fps = 50ms (optimized for voice coaching, was 16ms/60fps)
 
 function emit(payload) {
     process.stdout.write(`${JSON.stringify(payload)}\n`);

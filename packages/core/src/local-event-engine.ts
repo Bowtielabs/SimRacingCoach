@@ -137,6 +137,10 @@ export class LocalEventEngine {
   private cornerEntryTooFast: boolean = false;
   private lastCornerExitFeedback: number = 0;
 
+  // Performance optimization - cache values
+  private lastRpm: number = 0;
+  private lastGear: number = 0;
+
   constructor(capabilities: CapabilityMap, config: LocalEventConfig) {
     this.capabilities = capabilities;
     this.config = config;
@@ -601,6 +605,17 @@ export class LocalEventEngine {
     const rpm = frame.powertrain.rpm ?? 0;
     const gear = frame.powertrain.gear ?? 0;
     const speed = frame.powertrain.speedKph ?? 0;
+
+    // Performance optimization: Skip if RPM/gear haven't changed significantly
+    const rpmChanged = Math.abs(rpm - this.lastRpm) > 100;
+    const gearChanged = gear !== this.lastGear;
+
+    if (!rpmChanged && !gearChanged) {
+      return null; // No significant change, skip calculation
+    }
+
+    this.lastRpm = rpm;
+    this.lastGear = gear;
 
     // Check cooldown
     if (t - this.lastGearSuggestion < COACHING_COOLDOWNS.gearSuggestion) {

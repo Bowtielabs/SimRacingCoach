@@ -21,6 +21,8 @@ export declare class LocalEventEngine {
     private cornerEntrySpeed;
     private cornerEntryTooFast;
     private lastCornerExitFeedback;
+    private lastRpm;
+    private lastGear;
     constructor(capabilities: CapabilityMap, config: LocalEventConfig);
     update(frame: TelemetryFrame): LocalEvent[];
     private buildTrafficEvent;
