@@ -54,3 +54,4 @@ packages/ai-engine/models/*.bin
 packages/ai-engine/models/*.onnx
 packages/ai-engine/models/*.json
 !packages/ai-engine/models/README.md
+apps/service/logs/*.log
