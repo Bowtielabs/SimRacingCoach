@@ -110,6 +110,7 @@ export class TelemetryBuffer {
      */
     addFrame(frame: TelemetryFrame): boolean {
         if (!this.isCapturing) {
+            console.log('[TelemetryBuffer] ▶ Iniciando captura de ventana...');
             this.startCapture();
         }
 
@@ -117,6 +118,12 @@ export class TelemetryBuffer {
 
         // ¿Se completó la ventana de tiempo?
         const elapsed = Date.now() - this.windowStartTime;
+
+        // Log de progreso cada ~5 segundos (300 frames a 60fps)
+        if (this.frames.length % 300 === 0) {
+            console.log(`[TelemetryBuffer] 📊 frames=${this.frames.length}, elapsed=${(elapsed / 1000).toFixed(1)}s/${(this.config.windowDurationMs / 1000)}s (${Math.round(elapsed / this.config.windowDurationMs * 100)}%)`);
+        }
+
         if (elapsed >= this.config.windowDurationMs) {
             this.completeWindow();
             return true;

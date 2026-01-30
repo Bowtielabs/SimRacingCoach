@@ -190,7 +190,7 @@ export class AdvancedTelemetryAnalyzer {
             const throttle = (curr.powertrain?.throttle ?? 0) * 100;
             const lapDistPct = (curr as any).session?.lapDistPct ?? 0;
             const lateralG = Math.abs(curr.physics?.lateralG ?? 0);
-            const yawRate = Math.abs(curr.physics?.yawRate ?? 0);
+            const yawRate = Math.abs((curr.physics as any)?.yawRate ?? 0);
 
             // Detectar entrada a curva (ángulo de volante > 0.15 rad ≈ 8.5°)
             if (!inCorner && steering > 0.15) {

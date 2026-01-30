@@ -6,25 +6,9 @@ import { TelemetryRule } from './telemetry-rules-engine';
  */
 export const TELEMETRY_RULES: TelemetryRule[] = [
     // ========================================
-    // SISTEMA - HEARTBEAT (para verificar que funciona)
-    // ========================================
-
-    {
-        id: 'system-heartbeat',
-        category: 'technique',
-        priority: 1, // Baja prioridad, solo si no hay otras reglas
-        condition: (d) => {
-            const speed = d.current.powertrain?.speedKph || 0;
-            const onTrack = speed > 50; // Solo cuando está rodando a buena velocidad
-            return onTrack;
-        },
-        advice: 'Sistema de coaching activo. Vamos bien.',
-        cooldown: 60 // Solo cada 60 segundos como máximo
-    },
-
-    // ========================================
     // MOTOR Y TRANSMISIÓN
     // ========================================
+
 
     {
         id: 'engine-overrev-critical',
@@ -115,7 +99,7 @@ export const TELEMETRY_RULES: TelemetryRule[] = [
             const avgTemp = tyreTemps.reduce((a, b) => a + b, 0) / tyreTemps.length;
             return avgTemp < 60 && avgTemp > 0;
         },
-        advice: 'Neumáticos fríos, calentar con zigzag suave',
+        advice: 'Gomas frías, hacé unas serpentinas para levantar temperatura',
         cooldown: 40
     },
 
@@ -240,7 +224,203 @@ export const TELEMETRY_RULES: TelemetryRule[] = [
             const lr = d.current.traffic?.carLeftRight;
             return lr !== undefined && Math.abs(lr) < 0.3;
         },
-        advice: 'Auto muy cerca, cuidado al maniobrar',
+        advice: 'Tenés tráfico, ojo con la maniobra',
         cooldown: 10
+    },
+
+    // ========================================
+    // REGLAS ADICIONALES - INGENIERO DE CARRERAS
+    // ========================================
+
+    {
+        id: 'pit-window-open',
+        category: 'strategy',
+        priority: 5,
+        condition: (d) => {
+            const fuelPct = d.current.fuel?.levelPct || 1;
+            return fuelPct < 0.25 && fuelPct > 0.10;
+        },
+        advice: 'Se abre la ventana de boxes, prepará la parada',
+        cooldown: 60
+    },
+
+    {
+        id: 'apex-early',
+        category: 'technique',
+        priority: 4,
+        condition: (d) => {
+            // Detectar si está girando mucho con velocidad alta (apex prematuro)
+            const steering = Math.abs(d.averages.steeringAngle || 0);
+            const speed = d.current.powertrain?.speedKph || 0;
+            return steering > 25 && speed > 100;
+        },
+        advice: 'Estás tocando el apex muy temprano, paciencia en la entrada',
+        cooldown: 45
+    },
+
+    {
+        id: 'trail-braking-needed',
+        category: 'technique',
+        priority: 4,
+        condition: (d) => {
+            // Si frena fuerte pero no hay freno entrando a curva
+            return d.patterns.hardBrakingCount > 3 && d.patterns.throttleChanges < 5;
+        },
+        advice: 'Probá trail braking, soltar el freno gradual mientras girás',
+        cooldown: 60
+    },
+
+    {
+        id: 'smooth-inputs',
+        category: 'technique',
+        priority: 3,
+        condition: (d) => {
+            return d.patterns.throttleChanges > 15 && d.patterns.hardBrakingCount > 3;
+        },
+        advice: 'Suavizá los inputs, el auto te lo va a agradecer',
+        cooldown: 55
+    },
+
+    {
+        id: 'save-tyres',
+        category: 'strategy',
+        priority: 4,
+        condition: (d) => {
+            const tyreTemps = d.current.temps?.tyreC || [];
+            const avgTemp = tyreTemps.length > 0
+                ? tyreTemps.reduce((a, b) => a + b, 0) / tyreTemps.length
+                : 0;
+            return avgTemp > 95 && avgTemp < 100;
+        },
+        advice: 'Las gomas están al límite, cuidá el caucho en las curvas',
+        cooldown: 45
+    },
+
+    {
+        id: 'engine-cold',
+        category: 'engine',
+        priority: 5,
+        condition: (d) => {
+            const oilC = d.current.temps?.oilC || 100;
+            const waterC = d.current.temps?.waterC || 100;
+            return oilC < 70 || waterC < 60;
+        },
+        advice: 'Motor frío todavía, no le exijas hasta que levante temperatura',
+        cooldown: 30
+    },
+
+    {
+        id: 'brake-bias-front',
+        category: 'technique',
+        priority: 4,
+        condition: (d) => {
+            const brakeTemps = d.current.temps?.brakeC || [];
+            if (brakeTemps.length < 4) return false;
+            const frontAvg = (brakeTemps[0] + brakeTemps[1]) / 2;
+            const rearAvg = (brakeTemps[2] + brakeTemps[3]) / 2;
+            return frontAvg > rearAvg + 50;
+        },
+        advice: 'Frenos delanteros mucho más calientes, probá correr el balance para atrás',
+        cooldown: 50
+    },
+
+    {
+        id: 'push-now',
+        category: 'strategy',
+        priority: 5,
+        condition: (d) => {
+            const fuelPct = d.current.fuel?.levelPct || 0;
+            return fuelPct > 0.6 && d.lapTimes.delta < 0;
+        },
+        advice: 'Buen ritmo con nafta, dale que estás rápido',
+        cooldown: 60
+    },
+
+    {
+        id: 'consistent-laps',
+        category: 'technique',
+        priority: 3,
+        condition: (d) => {
+            const delta = Math.abs(d.lapTimes.delta || 0);
+            return delta < 0.5 && d.lapTimes.best > 0;
+        },
+        advice: 'Vueltas consistentes, seguí así que no regales nada',
+        cooldown: 90
+    },
+
+    {
+        id: 'lift-and-coast',
+        category: 'strategy',
+        priority: 4,
+        condition: (d) => {
+            const fuelPct = d.current.fuel?.levelPct || 1;
+            const lapsRemain = d.current.session?.sessionLapsRemain || 0;
+            return fuelPct < 0.20 && lapsRemain > 3;
+        },
+        advice: 'Levantá antes de las frenadas para estirar la nafta',
+        cooldown: 45
+    },
+
+    {
+        id: 'tyre-pressure-high',
+        category: 'tyres',
+        priority: 5,
+        condition: (d) => {
+            const tyreTemps = d.current.temps?.tyreC || [];
+            // Si las gomas están calientes pero con mucho desgaste central
+            return tyreTemps.some(t => t > 90 && t < 95);
+        },
+        advice: 'Gomas en ventana óptima, ahora rendís, manzana',
+        cooldown: 120
+    },
+
+    {
+        id: 'defensive-line',
+        category: 'track',
+        priority: 6,
+        condition: (d) => {
+            const lr = d.current.traffic?.carLeftRight;
+            const speed = d.current.powertrain?.speedKph || 0;
+            return lr !== undefined && Math.abs(lr) < 0.5 && speed > 80;
+        },
+        advice: 'Cuidá la línea, te quieren pasar',
+        cooldown: 15
+    },
+
+    {
+        id: 'accelerate-earlier',
+        category: 'technique',
+        priority: 4,
+        condition: (d) => {
+            const throttle = d.averages.throttle || 0;
+            const speed = d.averages.speed || 0;
+            return throttle < 60 && speed > 80 && d.patterns.throttleChanges < 10;
+        },
+        advice: 'Acelerá antes a la salida de las curvas, estás dejando tiempo',
+        cooldown: 50
+    },
+
+    {
+        id: 'incidents-warning',
+        category: 'track',
+        priority: 7,
+        condition: (d) => {
+            const incidents = d.current.session?.incidents || 0;
+            return incidents > 5 && incidents < 10;
+        },
+        advice: 'Ojo con los incidentes, no te descalifiquen',
+        cooldown: 60
+    },
+
+    {
+        id: 'incidents-critical',
+        category: 'track',
+        priority: 9,
+        condition: (d) => {
+            const incidents = d.current.session?.incidents || 0;
+            return incidents >= 10;
+        },
+        advice: '¡Muchos incidentes! Un toque más y te sacan, calmá',
+        cooldown: 30
     }
 ];

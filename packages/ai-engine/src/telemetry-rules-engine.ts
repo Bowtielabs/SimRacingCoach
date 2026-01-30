@@ -87,6 +87,8 @@ export class TelemetryRulesEngine {
      * @param maxResults Máximo de resultados a devolver (default: 5)
      */
     analyzeAll(data: TelemetryAnalysis, maxResults: number = 5): AnalysisResult[] {
+        console.log(`[RulesEngine] 🔵 ENTRADA - Buffer: ${data.last30sec?.length || 0} frames, Speed: ${Math.round(data.averages?.speed || 0)} kph`);
+
         const now = Date.now();
         const flags = data.current.flags?.sessionFlags || 0;
 
@@ -119,6 +121,7 @@ export class TelemetryRulesEngine {
         });
 
         if (applicableRules.length === 0) {
+            console.log(`[RulesEngine] 🔴 SALIDA - Sin reglas aplicables`);
             return [];
         }
 

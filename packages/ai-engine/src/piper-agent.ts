@@ -68,7 +68,9 @@ export class PiperAgent {
     }
 
     async initialize(modelPath?: string): Promise<void> {
-        const voicePath = modelPath || this.config.modelPath;
+        // Usar path por defecto si no se especifica o es vacío
+        const voicePath = modelPath || this.config.modelPath || VOICE_PATH;
+        this.config.modelPath = voicePath; // Guardar en config para uso en speak()
         console.log(`[Piper] Using voice: ${voicePath}`);
         this.isInitialized = true;
         console.log(`[Piper] Ready for synthesis (sound-play)`);
@@ -99,13 +101,18 @@ export class PiperAgent {
         const pcmChunks: Buffer[] = [];
 
         try {
+            // Log the actual piper path and args for debugging
+            const piperArgs = [
+                '--model', this.config.modelPath,
+                '--output_raw',
+                '--length_scale', lengthScale.toFixed(2)
+            ];
+            console.log(`[Piper] DEBUG - Path: ${PIPER_BIN_PATH}`);
+            console.log(`[Piper] DEBUG - Model: ${this.config.modelPath}`);
+
             // Collect PCM data from Piper
             await new Promise<void>((resolve, reject) => {
-                const piper = spawn(PIPER_BIN_PATH, [
-                    '--model', this.config.modelPath,
-                    '--output_raw',
-                    '--length_scale', lengthScale.toFixed(2)
-                ]);
+                const piper = spawn(PIPER_BIN_PATH, piperArgs);
 
                 piper.stdin.write(text);
                 piper.stdin.end();

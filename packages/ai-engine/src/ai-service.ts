@@ -1,23 +1,21 @@
 /**
- * AI Coaching Service - Standalone Binary Architecture
- * Orchestrates Llama.cpp, Piper TTS via child processes
+ * AI Coaching Service - Simplified Buffer Architecture
+ * Telemetry → Buffer (30s) → Rules Engine → TTS
  */
 
 import type { TelemetryFrame } from '@simracing/core';
-import { LlamaCppAgent } from './llama-cpp-agent.js';
 import { PiperAgent } from './piper-agent.js';
 import { TelemetryRulesEngine } from './telemetry-rules-engine.js';
 import type {
     AIServiceConfig,
-    CoachingContext,
     SessionContext,
     SupportedLanguage
 } from './types.js';
 
 const DEFAULT_CONFIG: AIServiceConfig = {
-    analysisInterval: 15, // seconds - lowered to 15s for more reactive feedback
+    analysisInterval: 30, // 30 seconds buffer window
     enabled: true,
-    mode: 'ai', // AI-only mode
+    mode: 'ai',
     language: {
         stt: 'es',
         tts: 'es'
@@ -27,12 +25,12 @@ const DEFAULT_CONFIG: AIServiceConfig = {
         contextSize: 2048,
         temperature: 0.7,
         topP: 0.9,
-        maxTokens: 40 // Ultra-short responses - just the essential advice
+        maxTokens: 40
     },
     stt: {
         modelPath: '',
         language: 'es',
-        vadEnabled: false // Not implemented yet
+        vadEnabled: false
     },
     tts: {
         modelPath: '',
@@ -46,229 +44,200 @@ const DEFAULT_CONFIG: AIServiceConfig = {
 
 export class AICoachingService {
     private config: AIServiceConfig;
-    private llm: LlamaCppAgent;
     private tts: PiperAgent;
     private rulesEngine: TelemetryRulesEngine;
 
-    private sessionContext: SessionContext | null = null;
-    private lastAnalysisTime: number = 0;
+    // Simple buffer system
     private frameBuffer: TelemetryFrame[] = [];
-    private isAnalyzing: boolean = false;
-    private hasGivenInitialGreeting: boolean = false;
-    private lastSpeed: number = 0;
-    private lastOnPitRoad: boolean = true; // Track pit road status for exit detection
+    private bufferStartTime: number = 0;
+    private isProcessingBuffer: boolean = false;
 
+    private sessionContext: SessionContext | null = null;
+    private hasGivenInitialGreeting: boolean = false;
     private initialized: boolean = false;
     private externalAgents: boolean = false;
 
-    constructor(config: Partial<AIServiceConfig> = {}, externalLlm?: LlamaCppAgent, externalTts?: PiperAgent) {
+    constructor(config: Partial<AIServiceConfig> = {}, externalTts?: PiperAgent) {
         this.config = { ...DEFAULT_CONFIG, ...config };
 
-        // Use external TTS if provided (critical to avoid multiple Piper instances)
         if (externalTts) {
-            console.log('[AIService] Using external TTS agent (shared Piper instance)');
+            console.log('[AIService] Using external TTS agent');
             this.tts = externalTts;
             this.externalAgents = true;
         } else {
-            console.log('[AIService] Creating new TTS agent (standalone Piper)');
+            console.log('[AIService] Creating new TTS agent');
             this.tts = new PiperAgent(this.config.tts);
             this.externalAgents = false;
         }
 
-        // LLM is disabled but keep reference for compatibility
-        if (externalLlm) {
-            this.llm = externalLlm;
-        } else {
-            this.llm = new LlamaCppAgent(this.config.llm);
-        }
-
         this.rulesEngine = new TelemetryRulesEngine();
-        console.log('[AIService] ✓ Telemetry Rules Engine active');
+        console.log('[AIService] ✓ Simple 30s Buffer System initialized');
     }
 
-    /**
-     * Initialize the service - starts child processes
-     */
     async initialize(): Promise<void> {
-        console.log('[AIService] Initializing AI Coaching Service...');
+        console.log('[AIService] Initializing...');
 
         try {
-            if (this.externalAgents) {
-                // External agents are already initialized, just mark as ready
-                console.log('[AIService] Using pre-initialized external agents');
-                // this.llm.setLanguage(this.config.language.stt); // Disabled LLM
-            } else {
-                // Initialize Piper (LLM start disabled per user request)
-                console.log('[AIService] Initializing Piper TTS...');
+            if (!this.externalAgents) {
                 await this.tts.initialize();
-
-                console.log('[AIService] ℹ️ LLM disabled for performance (Rules Engine only)');
             }
-
             this.initialized = true;
-            console.log('[AIService] ✓ AI Coaching Service initialized successfully');
+            console.log('[AIService] ✓ Ready');
         } catch (error) {
             console.error('[AIService] Failed to initialize:', error);
             throw error;
         }
     }
 
-    /**
-     * Start AI coaching session
-     */
     async startSession(context: SessionContext): Promise<void> {
         this.sessionContext = context;
         this.frameBuffer = [];
-        this.lastAnalysisTime = 0;
+        this.bufferStartTime = Date.now();
         this.hasGivenInitialGreeting = false;
-        this.lastSpeed = 0;
-        this.lastOnPitRoad = true; // Assume starting in pits or wanting a greeting on first exit
-        console.log('[AIService] Session started:', context);
+        console.log('[AIService] Session started');
     }
 
-    /**
-     * End current session
-     */
     endSession(): void {
         this.sessionContext = null;
+        this.frameBuffer = [];
         console.log('[AIService] Session ended');
     }
 
     /**
-     * Process telemetry frame
+     * Process telemetry frame - Simple flow:
+     * 1. Add frame to buffer
+     * 2. Every 30s, send buffer to rules engine
+     * 3. Clear buffer and repeat
      */
     async processFrame(frame: TelemetryFrame): Promise<void> {
-        if (!this.initialized || !this.sessionContext) {
+        // LOG SUPER VISIBLE para confirmar que esta version se ejecuta
+        if (Math.random() < 0.01) {
+            console.log('🟢🟢🟢 processFrame CALLED! 🟢🟢🟢');
+        }
+
+        if (!this.initialized) {
+            console.log('[AIService] ⚠ processFrame skipped: not initialized');
+            return;
+        }
+        if (!this.sessionContext) {
+            console.log('[AIService] ⚠ processFrame skipped: no session context');
             return;
         }
 
-        // Add to buffer (600 frames = 30s at 20fps, 1000 frames = ~50s)
+        // 1. Add frame to buffer
         this.frameBuffer.push(frame);
-        if (this.frameBuffer.length > 1000) {
-            this.frameBuffer.shift();
+
+        // Initialize buffer start time on first frame
+        if (this.bufferStartTime === 0) {
+            this.bufferStartTime = Date.now();
+            console.log('[Buffer] ▶ Buffer started, collecting frames for 30s...');
         }
 
-        // Detect pit exit using both speed and onPitRoad flag
+        // 2. Check for initial greeting (when speed > 5 kph)
         const currentSpeed = frame.powertrain?.speedKph || 0;
-        const currentOnPitRoad = frame.session?.onPitRoad ?? false;
-
-        // Debug logging for greeting trigger (every 100 frames = ~5 seconds to reduce spam)
-        if (this.frameBuffer.length % 100 === 0 && !this.hasGivenInitialGreeting) {
-            console.log(`[AIService] Waiting for speed > 5 Kph... Current: ${currentSpeed.toFixed(1)} Kph`);
-        }
-
-        // Transition: if speed goes above 5 kph for the first time in the session, greet.
         if (!this.hasGivenInitialGreeting && currentSpeed > 5) {
-            console.log('\n' + '🏁'.repeat(40));
-            console.log(`[AIService] 🏁 PIT EXIT DETECTED! Speed: ${currentSpeed.toFixed(1)} Kph`);
-            console.log('[AIService] 🎯 Calling giveInitialGreeting()...');
             this.hasGivenInitialGreeting = true;
-
-            // Make it synchronous so we can see errors immediately
-            try {
-                await this.giveInitialGreeting();
-                console.log('[AIService] ✅ Greeting completed successfully!');
-            } catch (err) {
-                console.error('[AIService] ❌ Greeting FAILED:', err);
-            }
+            console.log(`[AIService] 🏁 Speed detected: ${currentSpeed.toFixed(1)} kph - Greeting!`);
+            await this.giveInitialGreeting();
         }
 
-
-        // Update states for next frame
-        this.lastSpeed = currentSpeed;
-        this.lastOnPitRoad = currentOnPitRoad;
-
-        // Periodic status log every 500 frames (~25s) to avoid spam
-        if (this.frameBuffer.length % 500 === 0) {
-            const flags = frame.flags?.sessionFlags || 0;
-            console.log(`[AIService] Telemetry Status: Speed=${currentSpeed.toFixed(1)} Kph, Pit=${currentOnPitRoad}, Flags=0x${flags.toString(16)}, Buffer=${this.frameBuffer.length}`);
+        // 3. Log buffer progress every 5 seconds (~300 frames at 60fps)
+        const elapsed = Date.now() - this.bufferStartTime;
+        if (this.frameBuffer.length % 300 === 0) {
+            const progress = Math.min(100, (elapsed / 30000) * 100);
+            console.log(`[Buffer] 📊 frames=${this.frameBuffer.length}, elapsed=${(elapsed / 1000).toFixed(1)}s/30s (${progress.toFixed(0)}%), isProcessing=${this.isProcessingBuffer}`);
         }
 
-        const now = Date.now();
-        const timeSinceLastAnalysis = (now - this.lastAnalysisTime) / 1000;
-
-        // DEBUG: Log every 100 frames to see state of analysis
-        if (this.frameBuffer.length % 100 === 0) {
-            console.log(`[AIService DEBUG] isAnalyzing=${this.isAnalyzing}, timeSinceLastAnalysis=${timeSinceLastAnalysis.toFixed(1)}s, interval=${this.config.analysisInterval}s, sessionContext=${!!this.sessionContext}`);
-        }
-
-        // Skip if already analyzing
-        if (this.isAnalyzing) {
-            return;
-        }
-
-        if (timeSinceLastAnalysis >= this.config.analysisInterval) {
-            console.log(`[AIService] ⏱️ Triggering analysis (${timeSinceLastAnalysis.toFixed(1)}s since last)...`);
-            this.isAnalyzing = true;
-            this.runRulesAnalysis(frame) // Call the rules engine analysis
-                .finally(() => {
-                    this.isAnalyzing = false;
-                    console.log(`[AIService] ✓ Analysis complete, isAnalyzing=false`);
-                });
-            this.lastAnalysisTime = now;
+        // 4. Every 30 seconds, process buffer and send to rules engine
+        if (elapsed >= 30000 && !this.isProcessingBuffer) {
+            console.log(`[Buffer] ⏰ 30s reached! Calling processBufferAndSendToEngine...`);
+            await this.processBufferAndSendToEngine();
         }
     }
 
     /**
-     * Run AI analysis on current telemetry
+     * Process buffer and send to rules engine
      */
-    private async runRulesAnalysis(frame: TelemetryFrame): Promise<void> {
-        if (!this.sessionContext) return;
+    private async processBufferAndSendToEngine(): Promise<void> {
+        if (this.isProcessingBuffer || this.frameBuffer.length === 0) {
+            return;
+        }
+
+        this.isProcessingBuffer = true;
 
         try {
-            console.log('\n' + '═'.repeat(80));
-            console.log('[AIService] 📊 ANÁLISIS DE TELEMETRÍA (cada 30 seg)');
-            console.log('═'.repeat(80));
+            console.log('\n' + '═'.repeat(60));
+            console.log('[AIService] 🔔 30s window complete - Analyzing buffer');
+            console.log('═'.repeat(60));
 
-            // Log FULL telemetry frame for debugging
-            console.log('\n📦 FRAME COMPLETO:');
-            console.log(JSON.stringify(frame, null, 2));
-            console.log('\n' + '─'.repeat(80));
+            // Log buffer summary
+            const firstFrame = this.frameBuffer[0];
+            const lastFrame = this.frameBuffer[this.frameBuffer.length - 1];
 
-            // Calcular análisis de telemetría
-            const analysis = TelemetryRulesEngine.calculateAnalysis(frame, this.frameBuffer);
+            console.log(`\n📋 BUFFER ENVIADO AL MOTOR:`);
+            console.log(`   Frames: ${this.frameBuffer.length}`);
+            console.log(`   Duration: 30 seconds`);
+            console.log(`   First frame speed: ${Math.round(firstFrame?.powertrain?.speedKph || 0)} kph`);
+            console.log(`   Last frame speed: ${Math.round(lastFrame?.powertrain?.speedKph || 0)} kph`);
 
-            console.log('\n📈 RESUMEN:');
-            console.log(`  Powertrain: RPM=${Math.round(frame.powertrain?.rpm || 0)}, Speed=${Math.round(frame.powertrain?.speedKph || 0)}km/h, Gear=${frame.powertrain?.gear || 'N'}`);
-            console.log(`  Pedales: Throttle=${Math.round((frame.powertrain?.throttle || 0) * 100)}%, Brake=${Math.round((frame.powertrain?.brake || 0) * 100)}%`);
-            console.log(`  Temps: Oil=${Math.round(frame.temps?.oilC || 0)}°C, Water=${Math.round(frame.temps?.waterC || 0)}°C`);
-            console.log(`  Tyres: ${frame.temps?.tyreC?.map(t => Math.round(t)).join('/') || 'N/A'}°C`);
-            console.log(`  Brakes: ${frame.temps?.brakeC?.map(t => Math.round(t)).join('/') || 'N/A'}°C`);
-            console.log(`  Session: Pit=${frame.session?.onPitRoad}, Lap=${frame.session?.lap}, Incidents=${frame.session?.incidents}`);
-            console.log(`  Fuel: ${Math.round((frame.fuel?.levelPct || 0) * 100)}%`);
-            console.log(`  Flags: 0x${(frame.flags?.sessionFlags || 0).toString(16)}`);
-            console.log(`  Buffer: ${this.frameBuffer.length} frames`);
-            console.log(`  Patterns: HardBrakes=${analysis.patterns.hardBrakingCount}, ThrottleChanges=${analysis.patterns.throttleChanges}`);
+            // Log tail of buffer (last 5 frames)
+            console.log(`\n📋 BUFFER TAIL (últimos 5 frames):`);
+            const tail = this.frameBuffer.slice(-5);
+            tail.forEach((f, i) => {
+                console.log(`   [${this.frameBuffer.length - 5 + i}] Speed=${Math.round(f.powertrain?.speedKph || 0)}kph, Throttle=${Math.round((f.powertrain?.throttle || 0) * 100)}%, Brake=${Math.round((f.powertrain?.brake || 0) * 100)}%`);
+            });
 
-            // Obtener consejo del motor de reglas
-            const advice = this.rulesEngine.analyze(analysis);
+            // Calculate analysis using rules engine
+            const analysis = TelemetryRulesEngine.calculateAnalysis(lastFrame, this.frameBuffer);
 
-            if (advice) {
-                console.log('\n' + '🎯'.repeat(50));
-                console.log('[AIService] 💬 Consejo generado:');
-                console.log(`  "${advice}"`);
-                console.log('─'.repeat(100));
+            console.log(`\n📈 ANÁLISIS:`);
+            console.log(`   HardBrakes: ${analysis.patterns.hardBrakingCount}`);
+            console.log(`   ThrottleChanges: ${analysis.patterns.throttleChanges}`);
+            console.log(`   AvgSpeed: ${Math.round(analysis.averages.speed)} kph`);
 
-                // Generar voz con Piper
-                console.log('[AIService] 🔊 Generando voz...');
-                await this.tts.speak(advice, 'normal'); // Use this.tts and 'normal' speed
-                console.log('[AIService] ✓ Voz reproducida');
+            // Get ALL matching rules from rules engine (sorted by priority)
+            const allRules = this.rulesEngine.analyzeAll(analysis, 20);
+
+            if (allRules.length > 0) {
+                console.log(`\n🎯 REGLAS ACTIVADAS (${allRules.length} total):`);
+                console.log('─'.repeat(60));
+
+                // Loguear TODAS las reglas que se cumplieron
+                allRules.forEach((rule, i) => {
+                    const marker = i < 4 ? '🔊' : '  ';
+                    console.log(`${marker} [${i + 1}] ${rule.ruleId} (P${rule.priority}) - "${rule.advice}"`);
+                });
+
+                console.log('─'.repeat(60));
+
+                // Hablar hasta 4 consejos de mayor prioridad
+                const MAX_CONSEJOS = 4;
+                const topRules = allRules.slice(0, MAX_CONSEJOS);
+
+                console.log(`\n🔊 HABLANDO ${topRules.length} consejos:`);
+                for (const rule of topRules) {
+                    console.log(`   -> "${rule.advice}" (${rule.ruleId})`);
+                    await this.tts.speak(rule.advice, 'normal');
+                }
+                console.log('[AIService] ✓ Consejos reproducidos');
             } else {
-                console.log('[AIService] ℹ️ No hay consejos aplicables en este momento');
+                console.log('[AIService] ℹ️ No hay consejos aplicables');
             }
+
+            // Clear buffer and reset timer
+            this.frameBuffer = [];
+            this.bufferStartTime = Date.now();
+            console.log('[AIService] ✓ Buffer cleared, starting new 30s window');
 
         } catch (error) {
-            console.error('[AIService] ❌ Error en análisis:', error);
+            console.error('[AIService] ❌ Error processing buffer:', error);
+        } finally {
+            this.isProcessingBuffer = false;
         }
     }
 
-    /**
-     * Give initial motivational greeting when driver exits pits (Static to avoid LLM)
-     */
     private async giveInitialGreeting(): Promise<void> {
         try {
-            console.log('[AIService] 🏁 Giving initial motivational greeting (Static)...');
-
             const greetings = [
                 "¡Dale dale! Te voy a estar mirando y te ayudo a mejorar.",
                 "¡Vamos vamos! Estoy acá con vos, te voy dando consejos.",
@@ -277,52 +246,34 @@ export class AICoachingService {
             ];
 
             const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+            console.log(`[AIService] 🎯 GREETING: "${greeting}"`);
 
-            console.log('='.repeat(80));
-            console.log('[AIService] 🎯 INITIAL GREETING:');
-            console.log(greeting);
-            console.log('─'.repeat(100));
-
-            // Speak the greeting
             await this.tts.speak(greeting, 'normal');
-            console.log('[AIService] ✅ Initial greeting spoken');
+            console.log('[AIService] ✅ Greeting spoken');
         } catch (error) {
-            console.error('[AIService] Initial greeting failed:', error);
+            console.error('[AIService] Greeting failed:', error);
         }
     }
 
-    /**
-     * Set language
-     */
     setLanguage(language: SupportedLanguage): void {
         this.config.language.stt = language;
         this.config.language.tts = language;
-
-        this.llm.setLanguage(language);
         this.tts.setLanguage(language);
-
         console.log(`[AIService] Language changed to: ${language}`);
     }
 
-    /**
-     * Get service status
-     */
     getStatus() {
         return {
             initialized: this.initialized,
             sessionActive: this.sessionContext !== null,
+            bufferSize: this.frameBuffer.length,
             mode: 'ai',
             language: this.config.language
         };
     }
 
-    /**
-     * Cleanup - stop child processes
-     */
     async dispose(): Promise<void> {
-        await this.llm.stop();
         await this.tts.dispose();
-
         this.initialized = false;
         console.log('[AIService] Disposed');
     }
