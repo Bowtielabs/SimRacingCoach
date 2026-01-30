@@ -13,8 +13,10 @@
     },
     "simulators": {
         "iracing": "iRacing",
+        "actc": "Turismo Carretera (ACTC)",
         "acc": "Assetto Corsa Competizione",
         "ac": "Assetto Corsa",
+        "rfactor": "rFactor",
         "rf2": "rFactor 2",
         "ams2": "Automobilista 2"
     },
@@ -32,6 +34,6 @@
         "running": "Entrenamiento activo"
     },
     "voice": {
-        "testMessage": "Hola, soy tu entrenador virtual de SimRacing. Estoy listo para ayudarte a mejorar tu conducción."
+        "testMessage": "Hola!! te voy a ayudar para que puedas mejorar y te conviertas en el mejor piloto de Simuladores."
     }
 }

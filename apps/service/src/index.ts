@@ -75,8 +75,8 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
     });
   }
 
-  // Initialize AI if not already done and adapter is connected
-  if (!aiService && adapterStatus?.state === 'connected') {
+  // Initialize AI if not already done, adapter is connected, AND piperAgent is ready
+  if (!aiService && adapterStatus?.state === 'connected' && piperAgent) {
     console.log('[Service] 🤖 Initializing AI Coaching Service (from frame handler)...');
 
     // Pass external agents to avoid duplicate server initialization
@@ -87,7 +87,7 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
         stt: 'es',
         tts: 'es'
       }
-    }, llamaAgent!, piperAgent!);
+    }, llamaAgent, piperAgent);
 
     aiService.initialize()
       .then(() => {
@@ -114,10 +114,24 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
       });
   }
 
+  // Normalize sim name
+  const rawSim = adapterStatus?.sim || 'generic';
+  const simMap: Record<string, any> = {
+    'iRacing': 'iracing',
+    'Assetto Corsa Competizione': 'acc',
+    'Assetto Corsa': 'assetto_corsa',
+    'rFactor': 'rfactor',
+    'rFactor 2': 'rfactor2',
+    'Automobilista 2': 'automobilista2',
+    'SimuTC': 'actc', // Mapping SimuTC to actc for Turismo Carretera
+    'Other': 'generic'
+  };
+  const normalizedSim = simMap[rawSim] || 'generic';
+
   // Build telemetry frame for AI
   const frame: TelemetryFrame = {
     t: message.ts,
-    sim: 'iracing',
+    sim: normalizedSim,
     sessionId,
     player: {
       position: typeof data.position === 'number' ? data.position : undefined,
@@ -145,6 +159,8 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
       oilC: typeof data.temps?.oil_c === 'number' ? data.temps.oil_c : undefined,
       trackC: typeof data.temps?.track_c === 'number' ? data.temps.track_c : undefined,
       airC: typeof data.temps?.air_c === 'number' ? data.temps.air_c : undefined,
+      tyreC: Array.isArray(data.temps?.tyre_c) ? (data.temps.tyre_c as any[]).filter(v => typeof v === 'number') : undefined,
+      brakeC: Array.isArray(data.temps?.brake_c) ? (data.temps.brake_c as any[]).filter(v => typeof v === 'number') : undefined,
     },
     fuel: {
       level: typeof data.fuel_level === 'number' ? data.fuel_level : undefined,
@@ -152,8 +168,10 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
       usePerHour: typeof data.fuel_use_per_hour === 'number' ? data.fuel_use_per_hour : undefined,
     },
     session: {
-      onPitRoad: typeof data.on_pit_road === 'boolean' ? data.on_pit_road : undefined,
-      inGarage: typeof data.in_garage === 'boolean' ? data.in_garage : undefined,
+      // iRacing returns 0/1 as numbers, not booleans
+      onPitRoad: data.on_pit_road !== undefined ? Boolean(data.on_pit_road) : undefined,
+      inGarage: data.in_garage !== undefined ? Boolean(data.in_garage) : undefined,
+      isOnTrack: data.is_on_track !== undefined ? Boolean(data.is_on_track) : undefined,
       incidents: typeof data.incidents === 'number' ? data.incidents : undefined,
       lap: typeof data.lap === 'number' ? data.lap : undefined,
       lapsCompleted: typeof data.laps_completed === 'number' ? data.laps_completed : undefined,
@@ -171,20 +189,11 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
 
   // Send to AI service
   if (aiService && aiInitialized) {
-    console.log('[Service] 🎯 Sending frame to AI service for analysis...');
+    // No logging here to avoid spam - logs are in AIService
     aiService.processFrame(frame).catch((err: Error) => {
       logger.error({ err }, 'AI processing failed');
       console.error('[Service] ❌ AI processing error:', err);
     });
-  } else {
-    // DEBUG: Log why AI is not processing this frame
-    if (Math.random() < 0.01) { // Log 1% of skipped frames
-      console.log('[Service] ⏭️ Skipping AI processing:', {
-        aiServiceExists: !!aiService,
-        aiInitialized,
-        reason: !aiService ? 'no aiService' : 'not initialized'
-      });
-    }
   }
 
   telemetryBuffer.push(frame);
@@ -217,6 +226,8 @@ function handleAdapterStatus(message: AdapterStatusMessage) {
     // Initialize AI Service
     if (!aiService) {
       console.log('[Service] 🤖 Initializing AI Coaching Service...');
+
+      // Pass external agents to avoid duplicate server initialization
       aiService = new AICoachingService({
         enabled: true,
         mode: 'ai',
@@ -224,7 +235,7 @@ function handleAdapterStatus(message: AdapterStatusMessage) {
           stt: 'es',
           tts: 'es'
         }
-      });
+      }, llamaAgent!, piperAgent!);
 
       aiService.initialize()
         .then(() => {
@@ -403,45 +414,29 @@ const server = http.createServer(async (req, res) => {
 
   // POST /test-voice
   if (req.method === 'POST' && req.url === '/test-voice') {
-    try {
-      logger.info('Voice test - using AI + Piper');
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const params = body ? JSON.parse(body) : {};
+        const testText = params.text || "Hola!! te voy a ayudar para que puedas mejorar y te conviertas en el mejor piloto de Simuladores.";
 
-      // LLM is running externally on port 8080
+        logger.info({ testText }, 'Voice test - direct to Piper');
 
-      const systemPrompt = 'Sos un piloto profesional argentino. Usás jerga racing: "mandale", "che", "clavale los changos". Hablás con vos.';
-      const userPrompt = 'Decime algo original sobre esta prueba de voz. Máximo 2 frases. Sé energético.';
+        if (!piperAgent) {
+          throw new Error('Piper not ready');
+        }
 
-      const response = await fetch('http://localhost:8080/completion', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: `${systemPrompt}\n\nUser: ${userPrompt}\n\nAssistant:`,
-          n_predict: 80,
-          temperature: 0.9,
-          top_p: 0.95,
-          stop: ['\n\n', 'User:']
-        })
-      });
+        await piperAgent.speak(testText, 'normal', (config.voice.rate / 10) + 1.0);
 
-      const data = await response.json() as { content: string };
-      const aiResponse = data.content.trim();
-
-      logger.info({ aiResponse }, 'AI generated');
-
-      // Use persistent Piper
-      if (!piperAgent) {
-        throw new Error('Piper not ready');
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true }));
+      } catch (error) {
+        logger.error({ error }, 'Voice test failed');
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: String(error) }));
       }
-
-      await piperAgent.speak(aiResponse, 'normal', config.voice.rate + 1.0);
-
-      res.writeHead(200);
-      res.end(JSON.stringify({ success: true }));
-    } catch (error) {
-      logger.error({ error }, 'Voice test failed');
-      res.writeHead(500);
-      res.end(JSON.stringify({ error: String(error) }));
-    }
+    });
     return;
   }
 
@@ -509,15 +504,14 @@ console.log('[Service] Waiting for adapter connection...');
   try {
     const { LlamaCppAgent, PiperAgent } = await import('@simracing/ai-engine');
 
-    // Start LLM
+    // Start LLM (Disabled per user request - using Rules Engine only)
+    /*
     console.log('[Service] Starting LLM (async)...');
     llamaAgent = new LlamaCppAgent();
     llamaAgent.start().catch((e: Error) => console.error('[Service] LLM start error:', e));
     llamaAgent.setLanguage('es');
-    // Give LLM time to start
-    setTimeout(() => {
-      console.log('[Service] ✓ LLM should be ready now');
-    }, 20000);
+    */
+    console.log('[Service] ℹ️ LLM is disabled. Rules Engine will handle all coaching.');
 
     // Initialize Piper (keep instance alive)
     console.log('[Service] Starting Piper...');

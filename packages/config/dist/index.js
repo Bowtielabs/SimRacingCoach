@@ -86,8 +86,8 @@ export const defaultConfig = {
         oil: { warning: 110, critical: 120 },
     },
     ai: {
-        enabled: false, // Disabled by default - opt-in feature
-        mode: 'rules', // Rules-based coaching (AI deps are optional)
+        enabled: true, // FORCED: Always enabled - AI coaching is the only mode
+        mode: 'ai', // FORCED: AI-based coaching (LLM + Piper)
         language: 'es', // Spanish default
         voiceInput: false, // Disabled by default
         voiceInputMode: 'vad', // Voice activity detection

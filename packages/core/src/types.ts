@@ -1,4 +1,4 @@
-export type SimName = 'iracing';
+export type SimName = 'iracing' | 'acc' | 'f1' | 'assetto_corsa' | 'rfactor' | 'rfactor2' | 'automobilista2' | 'project_cars2' | 'beamng' | 'dirt_rally' | 'wreckfest' | 'actc' | 'generic';
 
 export type Category = 'TRAFFIC' | 'FLAGS' | 'ENGINE' | 'COACHING' | 'SYSTEM';
 
@@ -50,6 +50,7 @@ export interface TelemetryFrame {
   session?: {
     onPitRoad?: boolean;
     inGarage?: boolean;
+    isOnTrack?: boolean;
     incidents?: number;
     lap?: number;
     lapsCompleted?: number;

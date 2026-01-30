@@ -32,6 +32,8 @@ export interface NormalizedFrame {
         oil_c?: number | null;
         track_c?: number | null;
         air_c?: number | null;
+        tyre_c?: number[] | null;
+        brake_c?: (number | null)[] | null;
     } | null;
     fuel_level?: number | null;
     fuel_level_pct?: number | null;

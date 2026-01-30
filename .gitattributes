@@ -1,0 +1,2 @@
+*.onnx filter=lfs diff=lfs merge=lfs -text
+core/ai_engines/piper/es_AR-daniela.onnx filter=lfs diff=lfs merge=lfs -text

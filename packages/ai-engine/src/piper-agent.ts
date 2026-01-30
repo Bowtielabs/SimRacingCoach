@@ -1,155 +1,202 @@
 /**
- * Piper TTS Agent - Local Text-to-Speech via child_process
- * Spawns piper.exe to generate Spanish voice
+ * Piper TTS Agent - Sound-Play Version
+ * Uses sound-play for audio playback (pure JS, no external dependencies)
  */
 
 import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { createReadStream } from 'fs';
-import { unlink } from 'fs/promises';
+import { writeFile, unlink } from 'fs/promises';
+// @ts-ignore - sound-play doesn't have type definitions
+import soundPlay from 'sound-play';
 import type { TTSConfig, SupportedLanguage } from './types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Piper TTS paths - CORRECTED
+// Piper TTS paths
 const PIPER_BIN_PATH = path.join(__dirname, '../../../core/ai_engines/piper/piper/piper.exe');
-// Spanish voice (Spain) - works perfectly
-const VOICE_PATH = path.join(__dirname, '../../../models/piper/es_ES-davefx-medium.onnx');
+const VOICE_PATH = path.join(__dirname, '../../../core/ai_engines/piper/es_AR-daniela.onnx');
+
+// Audio config for Daniela voice
+const SAMPLE_RATE = 22050;
 
 const DEFAULT_CONFIG: TTSConfig = {
     modelPath: VOICE_PATH,
     language: 'es',
-    voice: 'es_AR-tux-medium',
+    voice: 'es_AR-daniela',
     speed: 1.0,
     volume: 0.8
 };
 
 /**
- * Piper TTS Agent using standalone binary
+ * Create WAV header for raw PCM data
+ */
+function createWavHeader(dataLength: number): Buffer {
+    const header = Buffer.alloc(44);
+    const byteRate = SAMPLE_RATE * 1 * 16 / 8;
+    const blockAlign = 1 * 16 / 8;
+
+    header.write('RIFF', 0);
+    header.writeUInt32LE(36 + dataLength, 4);
+    header.write('WAVE', 8);
+    header.write('fmt ', 12);
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20);
+    header.writeUInt16LE(1, 22);
+    header.writeUInt32LE(SAMPLE_RATE, 24);
+    header.writeUInt32LE(byteRate, 28);
+    header.writeUInt16LE(blockAlign, 32);
+    header.writeUInt16LE(16, 34);
+    header.write('data', 36);
+    header.writeUInt32LE(dataLength, 40);
+
+    return header;
+}
+
+/**
+ * Piper TTS Agent with sound-play for audio playback
  */
 export class PiperAgent {
     private config: TTSConfig;
-    private currentAudio: any = null;
+    private _isSpeaking: boolean = false;
+    private speakQueue: Array<{ text: string; priority: string; speed: number; resolve: (value: string) => void; reject: (error: Error) => void }> = [];
+    private isInitialized: boolean = false;
 
     constructor(config: Partial<TTSConfig> = {}) {
         this.config = { ...DEFAULT_CONFIG, ...config };
     }
 
-    /**
-     * Initialize (verify piper exists)
-     */
     async initialize(modelPath?: string): Promise<void> {
-        const path = modelPath || this.config.modelPath;
-        console.log(`[Piper] Using voice: ${path}`);
-        console.log(`[Piper] Ready for synthesis`);
+        const voicePath = modelPath || this.config.modelPath;
+        console.log(`[Piper] Using voice: ${voicePath}`);
+        this.isInitialized = true;
+        console.log(`[Piper] Ready for synthesis (sound-play)`);
     }
 
-    /**
-     * Speak text using Piper
-     * @param speed - Speech speed multiplier (0.5 = slow, 1.0 = normal, 2.0 = fast)
-     */
     async speak(text: string, priority: 'normal' | 'urgent' = 'normal', speed: number = 1.0): Promise<string> {
-        console.log(`[Piper] Speaking: "${text}" (${priority}, speed: ${speed})`);
+        console.log(`[Piper] Queueing: "${text.substring(0, 50)}..." (${priority}, speed: ${speed})`);
 
-        const outputWav = path.join(__dirname, `../../../core/ai_engines/piper/output_${Date.now()}.wav`);
+        if (this._isSpeaking) {
+            console.log(`[Piper] Already speaking, adding to queue (queue size: ${this.speakQueue.length})`);
+            return new Promise((resolve, reject) => {
+                this.speakQueue.push({ text, priority, speed, resolve, reject });
+            });
+        }
 
-        // Piper uses --length_scale for speed (inverse: lower = faster, higher = slower)
+        return this.doSpeak(text, speed);
+    }
+
+    /**
+     * Perform TTS with sound-play
+     */
+    private async doSpeak(text: string, speed: number): Promise<string> {
+        this._isSpeaking = true;
+        const startTime = Date.now();
+        console.log(`[Piper] 🔊 Speaking: "${text.substring(0, 50)}..."`);
+
         const lengthScale = 1.0 / speed;
+        const pcmChunks: Buffer[] = [];
 
-        return new Promise((resolve, reject) => {
-            const piper = spawn(PIPER_BIN_PATH, [
-                '--model', this.config.modelPath,
-                '--output_file', outputWav,
-                '--length_scale', lengthScale.toFixed(2)
-            ]);
+        try {
+            // Collect PCM data from Piper
+            await new Promise<void>((resolve, reject) => {
+                const piper = spawn(PIPER_BIN_PATH, [
+                    '--model', this.config.modelPath,
+                    '--output_raw',
+                    '--length_scale', lengthScale.toFixed(2)
+                ]);
 
-            // Send text to stdin
-            piper.stdin.write(text);
-            piper.stdin.end();
+                piper.stdin.write(text);
+                piper.stdin.end();
 
-            piper.on('close', async (code) => {
-                if (code !== 0) {
-                    reject(new Error(`Piper exited with code ${code}`));
-                    return;
-                }
+                piper.stdout.on('data', (chunk: Buffer) => {
+                    pcmChunks.push(chunk);
+                });
 
-                try {
-                    // Play the WAV file using Windows
-                    await this.playWav(outputWav);
-
-                    // Clean up
-                    await unlink(outputWav);
-
-                    resolve(outputWav);
-                } catch (error) {
-                    reject(error);
-                }
-            });
-
-            piper.stderr.on('data', (data) => {
-                console.error('[Piper ERROR]', data.toString());
-            });
-        });
-    }
-
-    /**
-     * Play WAV file using Windows sound player
-     */
-    private async playWav(wavPath: string): Promise<void> {
-        return new Promise((resolve, reject) => {
-            // Use PowerShell to play audio on Windows
-            const player = spawn('powershell', [
-                '-Command',
-                `(New-Object Media.SoundPlayer '${wavPath}').PlaySync()`
-            ]);
-
-            player.on('close', (code) => {
-                if (code === 0) {
+                piper.on('close', (code) => {
+                    if (code !== 0) {
+                        reject(new Error(`Piper exited with code ${code}`));
+                        return;
+                    }
                     resolve();
-                } else {
-                    reject(new Error(`Audio playback failed with code ${code}`));
-                }
+                });
+
+                piper.stderr.on('data', (data) => {
+                    const msg = data.toString();
+                    if (msg.includes('[error]')) {
+                        console.error('[Piper ERROR]', msg);
+                    }
+                });
             });
-        });
+
+            const pcmData = Buffer.concat(pcmChunks);
+            const synthesisTime = Date.now() - startTime;
+            const audioDurationMs = (pcmData.length / (SAMPLE_RATE * 2)) * 1000;
+            console.log(`[Piper] ⚡ Synthesis: ${synthesisTime}ms, audio: ${Math.round(audioDurationMs)}ms`);
+
+            // Create WAV
+            const wavHeader = createWavHeader(pcmData.length);
+            const wavData = Buffer.concat([wavHeader, pcmData]);
+
+            // Write temp file
+            const tempWav = path.join(__dirname, `../../../core/ai_engines/piper/audio_${Date.now()}.wav`);
+            await writeFile(tempWav, wavData);
+
+            // Play with sound-play (starts immediately, returns before done)
+            const playStart = Date.now();
+            soundPlay.play(tempWav, this.config.volume);
+
+            // Wait for audio to finish
+            await new Promise(resolve => setTimeout(resolve, audioDurationMs + 200));
+
+            const playTime = Date.now() - playStart;
+            await unlink(tempWav).catch(() => { });
+
+            const totalTime = Date.now() - startTime;
+            console.log(`[Piper] ✅ Total: ${totalTime}ms (synthesis: ${synthesisTime}ms, play: ${playTime}ms)`);
+
+            return tempWav;
+        } finally {
+            this._isSpeaking = false;
+            this.processQueue();
+        }
     }
 
-    /**
-     * Interrupt current speech
-     */
+    private async processQueue(): Promise<void> {
+        if (this.speakQueue.length === 0) return;
+        if (this._isSpeaking) return;
+
+        const next = this.speakQueue.shift()!;
+        console.log(`[Piper] Processing queue item (${this.speakQueue.length} remaining)`);
+
+        try {
+            const result = await this.doSpeak(next.text, next.speed);
+            next.resolve(result);
+        } catch (error) {
+            next.reject(error as Error);
+        }
+    }
+
     async interrupt(): Promise<void> {
         console.log('[Piper] Interrupting speech');
-        // TODO: Implement interrupt if needed
     }
 
-    /**
-     * Set language/voice
-     */
     setLanguage(language: SupportedLanguage): void {
         this.config.language = language;
         console.log(`[Piper] Language set to: ${language}`);
     }
 
-    /**
-     * Cleanup
-     */
     async dispose(): Promise<void> {
         console.log('[Piper] Disposed');
     }
 
-    /**
-     * Check if currently speaking
-     */
     isSpeaking(): boolean {
-        return false; // TODO: Track playback state
+        return this._isSpeaking;
     }
 
-    /**
-     * Get queue length
-     */
     getQueueLength(): number {
-        return 0; // TODO: Implement queue
+        return this.speakQueue.length;
     }
 }
 

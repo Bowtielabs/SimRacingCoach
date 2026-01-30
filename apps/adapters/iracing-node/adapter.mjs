@@ -39,11 +39,16 @@ async function loop(sdk) {
             if (!connected) {
                 connected = true;
                 emit({ type: 'status', state: 'connected', sim, details: 'Connected' });
-                log('Connected to iRacing');
+                log('✓ Connected to iRacing SDK and receiving data');
             }
 
             // Get telemetry data
             const telemetry = sdk.getTelemetry();
+            if (!telemetry || Object.keys(telemetry).length === 0) {
+                if (Math.random() < 0.05) log('Warning: Received empty telemetry object');
+                continue;
+            }
+
             const now = Date.now();
 
             // Helper to extract value from irsdk-node v4 format
@@ -51,6 +56,7 @@ async function loop(sdk) {
 
             // Map iRacing telemetry to NormalizedFrame (comprehensive capture)
             const data = {
+                // ... (rest of the mapping is same)
                 // Basic powertrain
                 speed_mps: getValue(telemetry.Speed) || 0,
                 rpm: getValue(telemetry.RPM),
@@ -83,7 +89,21 @@ async function loop(sdk) {
                     water_c: getValue(telemetry.WaterTemp),
                     oil_c: getValue(telemetry.OilTemp),
                     track_c: getValue(telemetry.TrackTemp),
-                    air_c: getValue(telemetry.AirTemp)
+                    air_c: getValue(telemetry.AirTemp),
+                    // Tyres (Average of Left/Center/Right for each wheel)
+                    tyre_c: [
+                        (getValue(telemetry.LFtempCL) + getValue(telemetry.LFtempCM) + getValue(telemetry.LFtempCR)) / 3,
+                        (getValue(telemetry.RFtempCL) + getValue(telemetry.RFtempCM) + getValue(telemetry.RFtempCR)) / 3,
+                        (getValue(telemetry.LRtempCL) + getValue(telemetry.LRtempCM) + getValue(telemetry.LRtempCR)) / 3,
+                        (getValue(telemetry.RRtempCL) + getValue(telemetry.RRtempCM) + getValue(telemetry.RRtempCR)) / 3
+                    ],
+                    // Brakes (if available)
+                    brake_c: [
+                        getValue(telemetry.LFbrakeTemp),
+                        getValue(telemetry.RFbrakeTemp),
+                        getValue(telemetry.LRbrakeTemp),
+                        getValue(telemetry.RRbrakeTemp)
+                    ]
                 },
 
                 // Fuel

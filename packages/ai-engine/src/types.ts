@@ -36,6 +36,7 @@ export interface CoachingContext {
     carId: string;
     sessionType: 'practice' | 'qualify' | 'race';
     currentTelemetry: TelemetryFrame;
+    recentFrames: TelemetryFrame[];  // Last 30 seconds of telemetry for pattern analysis
     detectedPatterns: DrivingPattern[];
     conversationHistory: ConversationMessage[];
     language: SupportedLanguage;
