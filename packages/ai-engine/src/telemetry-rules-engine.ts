@@ -52,6 +52,16 @@ export interface TelemetryRule {
 }
 
 /**
+ * Resultado de análisis con múltiples recomendaciones
+ */
+export interface AnalysisResult {
+    ruleId: string;
+    category: 'engine' | 'brakes' | 'tyres' | 'technique' | 'strategy' | 'track';
+    priority: number;
+    advice: string;
+}
+
+/**
  * Motor de reglas de telemetría
  * Analiza datos de iRacing y genera consejos basados en conocimiento de ingeniería de carreras
  */
@@ -67,6 +77,16 @@ export class TelemetryRulesEngine {
      * Analiza telemetría y devuelve el mejor consejo disponible
      */
     analyze(data: TelemetryAnalysis): string | null {
+        const results = this.analyzeAll(data, 1);
+        return results.length > 0 ? results[0].advice : null;
+    }
+
+    /**
+     * Analiza telemetría y devuelve MÚLTIPLES consejos ordenados por prioridad
+     * @param data Análisis de telemetría
+     * @param maxResults Máximo de resultados a devolver (default: 5)
+     */
+    analyzeAll(data: TelemetryAnalysis, maxResults: number = 5): AnalysisResult[] {
         const now = Date.now();
         const flags = data.current.flags?.sessionFlags || 0;
 
@@ -99,21 +119,28 @@ export class TelemetryRulesEngine {
         });
 
         if (applicableRules.length === 0) {
-            return null;
+            return [];
         }
 
         // Ordenar por prioridad (mayor primero)
         applicableRules.sort((a, b) => b.priority - a.priority);
 
-        // Tomar la regla de mayor prioridad
-        const selectedRule = applicableRules[0];
+        // Tomar las reglas de mayor prioridad (hasta maxResults)
+        const selectedRules = applicableRules.slice(0, maxResults);
 
-        // Actualizar tiempo de último consejo
-        this.lastAdviceTime.set(selectedRule.id, now);
+        // Actualizar tiempos y construir resultados
+        const results: AnalysisResult[] = selectedRules.map(rule => {
+            this.lastAdviceTime.set(rule.id, now);
+            console.log(`[RulesEngine] 🎯 Regla activada: ${rule.id} (prioridad ${rule.priority})`);
+            return {
+                ruleId: rule.id,
+                category: rule.category,
+                priority: rule.priority,
+                advice: rule.advice,
+            };
+        });
 
-        console.log(`[RulesEngine] 🎯 Regla activada: ${selectedRule.id} (prioridad ${selectedRule.priority})`);
-
-        return selectedRule.advice;
+        return results;
     }
 
     /**

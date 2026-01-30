@@ -19,5 +19,11 @@ export { PatternAnalyzer } from './pattern-analyzer.js';
 // Model Management
 export { ModelManager, AVAILABLE_MODELS } from './model-manager.js';
 
+// Telemetry Analysis
+export { TelemetryBuffer } from './telemetry-buffer.js';
+export { TelemetryRulesEngine, TelemetryRulesEngine as RulesEngine } from './telemetry-rules-engine.js';
+export type { TelemetryWindow, WindowSummary, TelemetryBufferConfig } from './telemetry-buffer.js';
+export type { TelemetryAnalysis, TelemetryRule, AnalysisResult } from './telemetry-rules-engine.js';
+
 // Main service
 export { AICoachingService } from './ai-service.js';
