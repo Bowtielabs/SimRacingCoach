@@ -74,6 +74,11 @@ core/ai_engines/piper/output_*.wav
 test-*.ps1
 test-*.txt
 test-*.js
+test-*.mjs
 packages/ai-engine/test-*.js
 packages/ai-engine/test-*.mjs
 apps/service/logs/*.log
+
+# Telemetry buffers and test data
+apps/service/buffer-*.json
+apps/adapters/*/real-telemetry.json

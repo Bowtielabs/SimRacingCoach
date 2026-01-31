@@ -1,3 +1,16 @@
+// ═══════════════════════════════════════════════════════════════
+// DEBUG FLAGS - Motor de Reglas
+// ═══════════════════════════════════════════════════════════════
+const DEBUG = {
+    ENTRADA: true,         // Log de entrada con resumen del buffer (TEMP DEBUG)
+    REGLAS_EVALUADAS: true, // Log de cada regla que cumple condición ✅
+    REGLAS_ACTIVADAS: true, // Log de reglas que se van a hablar ✅
+    SALIDA: true,          // Log cuando no hay reglas aplicables ✅
+    FLAGS: true,           // Log de session flags ✅
+    INIT: false            // Log de inicialización
+};
+// ═══════════════════════════════════════════════════════════════
+
 import { TelemetryFrame } from '@simracing/core';
 import { TELEMETRY_RULES } from './telemetry-rules.js';
 
@@ -87,12 +100,14 @@ export class TelemetryRulesEngine {
      * @param maxResults Máximo de resultados a devolver (default: 5)
      */
     analyzeAll(data: TelemetryAnalysis, maxResults: number = 5): AnalysisResult[] {
-        console.log(`[RulesEngine] 🔵 ENTRADA - Buffer: ${data.last30sec?.length || 0} frames, Speed: ${Math.round(data.averages?.speed || 0)} kph`);
+        if (DEBUG.ENTRADA) {
+            console.log(`[RulesEngine] 🔵 ENTRADA - Buffer: ${data.last30sec?.length || 0} frames, Speed: ${Math.round(data.averages?.speed || 0)} kph`);
+        }
 
         const now = Date.now();
         const flags = data.current.flags?.sessionFlags || 0;
 
-        if (flags !== 0) {
+        if (DEBUG.FLAGS && flags !== 0) {
             console.log(`[RulesEngine] 🚩 Analizando flags: 0x${flags.toString(16)}`);
         }
 
@@ -110,7 +125,7 @@ export class TelemetryRulesEngine {
             // Verificar condición
             try {
                 const result = rule.condition(data);
-                if (result) {
+                if (DEBUG.REGLAS_EVALUADAS && result) {
                     console.log(`[RulesEngine] -> Regla "${rule.id}" CUMPLE condición.`);
                 }
                 return result;
@@ -121,7 +136,9 @@ export class TelemetryRulesEngine {
         });
 
         if (applicableRules.length === 0) {
-            console.log(`[RulesEngine] 🔴 SALIDA - Sin reglas aplicables`);
+            if (DEBUG.SALIDA) {
+                console.log(`[RulesEngine] 🔴 SALIDA - Sin reglas aplicables`);
+            }
             return [];
         }
 
@@ -134,7 +151,9 @@ export class TelemetryRulesEngine {
         // Actualizar tiempos y construir resultados
         const results: AnalysisResult[] = selectedRules.map(rule => {
             this.lastAdviceTime.set(rule.id, now);
-            console.log(`[RulesEngine] 🎯 Regla activada: ${rule.id} (prioridad ${rule.priority})`);
+            if (DEBUG.REGLAS_ACTIVADAS) {
+                console.log(`[RulesEngine] 🎯 Regla activada: ${rule.id} (prioridad ${rule.priority})`);
+            }
             return {
                 ruleId: rule.id,
                 category: rule.category,
@@ -276,6 +295,8 @@ export class TelemetryRulesEngine {
      */
     private initializeRules(): void {
         this.rules = TELEMETRY_RULES;
-        console.log(`[RulesEngine] ✓ Inicializadas ${this.rules.length} reglas de telemetría`);
+        if (DEBUG.INIT) {
+            console.log(`[RulesEngine] ✓ Inicializadas ${this.rules.length} reglas de telemetría`);
+        }
     }
 }

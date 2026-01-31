@@ -28,7 +28,7 @@ let config = loadConfig(configPath);
 const logger = createLogger({
   logDir: './logs',
   name: 'service',
-  level: 'debug',
+  level: 'silent', // Cambiar a 'debug' para ver todos los logs
 });
 
 const fpsTracker = new FpsTracker();
@@ -69,12 +69,11 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
 
 
   // Initialize AI if not already done, adapter is connected, AND piperAgent is ready
-  // DEBUG: Log para ver por qué no se inicializa
-  if (Math.random() < 0.01) {
-    console.log(`[Service] AI init check: aiService=${!!aiService}, adapterConnected=${adapterStatus?.state === 'connected'}, piperAgent=${!!piperAgent}`);
-  }
+  // if (Math.random() < 0.01) {
+  //   console.log(`[Service] AI init check: aiService=${!!aiService}, adapterConnected=${adapterStatus?.state === 'connected'}, piperAgent=${!!piperAgent}`);
+  // }
   if (!aiService && adapterStatus?.state === 'connected' && piperAgent) {
-    console.log('[Service] 🤖 Initializing AI Coaching Service (from frame handler)...');
+    // console.log('[Service] 🤖 Initializing AI Coaching Service (from frame handler)...');
 
     // Pass external agents to avoid duplicate server initialization
     aiService = new AICoachingService({
@@ -84,12 +83,12 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
         stt: 'es',
         tts: 'es'
       }
-    }, llamaAgent, piperAgent);
+    }, piperAgent);
 
     aiService.initialize()
       .then(() => {
         aiInitialized = true;
-        console.log('[Service] ✓ AI Coaching Service ready');
+        // console.log('[Service] ✓ AI Coaching Service ready');
 
         // Start AI session
         aiService!.startSession({
@@ -188,14 +187,14 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
   if (aiService && aiInitialized) {
     aiService.processFrame(frame).catch((err: Error) => {
       logger.error({ err }, 'AI processing failed');
-      console.error('[Service] ❌ AI processing error:', err);
+      // console.error('[Service] ❌ AI processing error:', err);
     });
-  } else if (aiService && !aiInitialized) {
-    // Log ocasional para debug
-    if (Math.random() < 0.01) {
-      console.log('[Service] ⏳ aiService exists but not initialized yet');
-    }
   }
+  // else if (aiService && !aiInitialized) {
+  //   if (Math.random() < 0.01) {
+  //     console.log('[Service] ⏳ aiService exists but not initialized yet');
+  //   }
+  // }
 
   telemetryBuffer.push(frame);
   if (telemetryBuffer.length > 1000) {
@@ -204,29 +203,30 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
 }
 
 function handleAdapterStatus(message: AdapterStatusMessage) {
-  console.log('[Service] handleAdapterStatus called:', message); // DEBUG
+  // console.log('[Service] handleAdapterStatus called:', message);
 
   const wasConnected = adapterStatus?.state === 'connected';
   adapterStatus = message;
 
   if (message.state === 'connected' && !wasConnected) {
-    console.log('[Service] Adapter connected - initializing AI');
+    // console.log('[Service] Adapter connected - initializing AI');
 
     // Announce connection via Piper
-    console.log('[Service] *** ATTEMPTING TO ANNOUNCE CONNECTION ***');
-    console.log('[Service] piperAgent exists:', !!piperAgent);
+    // console.log('[Service] *** ATTEMPTING TO ANNOUNCE CONNECTION ***');
+    // console.log('[Service] piperAgent exists:', !!piperAgent);
     if (piperAgent) {
-      console.log('[Service] Calling piperAgent.speak...');
+      // console.log('[Service] Calling piperAgent.speak...');
       piperAgent.speak('Entrenador virtual conectado', 'normal')
-        .then(() => console.log('[Service] ✓ Connection announcement complete'))
-        .catch((err: any) => console.error('[Service] Failed to speak connection message:', err));
-    } else {
-      console.error('[Service] ERROR: piperAgent is null!');
+        .then(() => { }) // console.log('[Service] ✓ Connection announcement complete'))
+        .catch((err: any) => { }); // console.error('[Service] Failed to speak connection message:', err));
     }
+    // else {
+    //   console.error('[Service] ERROR: piperAgent is null!');
+    // }
 
     // Initialize AI Service
     if (!aiService) {
-      console.log('[Service] 🤖 Initializing AI Coaching Service...');
+      // console.log('[Service] 🤖 Initializing AI Coaching Service...');
 
       // Pass external agents to avoid duplicate server initialization
       aiService = new AICoachingService({
@@ -236,12 +236,12 @@ function handleAdapterStatus(message: AdapterStatusMessage) {
           stt: 'es',
           tts: 'es'
         }
-      }, llamaAgent!, piperAgent!);
+      }, piperAgent!);
 
       aiService.initialize()
         .then(() => {
           aiInitialized = true;
-          console.log('[Service] ✓ AI Coaching Service ready');
+          // console.log('[Service] ✓ AI Coaching Service ready');
 
           // Start AI session
           aiService!.startSession({
@@ -259,10 +259,10 @@ function handleAdapterStatus(message: AdapterStatusMessage) {
           });
         })
         .catch((err) => {
-          console.error('[Service] ✗ AI initialization failed:', err);
+          // console.error('[Service] ✗ AI initialization failed:', err);
         });
     } else {
-      console.log('[Service] AI Service already exists, restarting session');
+      // console.log('[Service] AI Service already exists, restarting session');
       aiService.startSession({
         simName: 'iracing',
         trackId: 'unknown',
@@ -280,7 +280,7 @@ function handleAdapterStatus(message: AdapterStatusMessage) {
   }
 
   if (message.state === 'disconnected' && wasConnected) {
-    console.log('[Service] Adapter disconnected');
+    // console.log('[Service] Adapter disconnected');
     if (aiService) {
       aiService.endSession();
     }
@@ -290,7 +290,7 @@ function handleAdapterStatus(message: AdapterStatusMessage) {
 }
 
 function handleAdapterLog(message: AdapterLogMessage) {
-  logger.info({ from: 'adapter', text: message.message });
+  // logger.info({ from: 'adapter', text: message.message }); // Comentado para output limpio
 }
 
 function startAdapter(which: AdapterId) {
@@ -309,7 +309,7 @@ function startAdapter(which: AdapterId) {
     ? path.join(process.cwd(), '../adapters/mock-iracing/adapter.js')
     : path.join(process.cwd(), '../adapters/iracing-node/adapter.mjs');
 
-  console.log(`[Service] 🔌 Starting adapter: ${which} from ${adapterPath}`);
+  // console.log(`[Service] 🔌 Starting adapter: ${which} from ${adapterPath}`);
 
   adapterSupervisor = new AdapterSupervisor({
     adapterId: which,
@@ -351,7 +351,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  logger.info({ method: req.method, url: req.url }, 'Incoming request');
+  // logger.info({ method: req.method, url: req.url }, 'Incoming request'); // Comentado para output limpio
 
   // POST /config - Update configuration
   if (req.method === 'POST' && req.url === '/config') {
@@ -385,7 +385,7 @@ const server = http.createServer(async (req, res) => {
   // GET /status
   if (req.method === 'GET' && req.url === '/status') {
     // Log the adapter status for debugging 
-    logger.info({ currentAdapterStatus: adapterStatus }, 'Status requested');
+    // logger.info({ currentAdapterStatus: adapterStatus }, 'Status requested'); // Comentado para output limpio
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
@@ -483,7 +483,7 @@ const server = http.createServer(async (req, res) => {
 const PORT = 7878;
 server.listen(PORT, () => {
   logger.info({ port: PORT }, 'control server listening');
-  console.log(`[${new Date().toLocaleTimeString()}] INFO (service): control server listening on ${PORT}`);
+  // console.log(`[${new Date().toLocaleTimeString()}] INFO (service): control server listening on ${PORT}`);
 });
 
 // Watch config changes
@@ -491,7 +491,7 @@ watchConfig(applyConfig);
 
 // Cleanup on exit
 process.on('SIGINT', async () => {
-  console.log('\n[Service] Shutting down...');
+  // console.log('\n[Service] Shutting down...');
   stopAdapter();
 
   if (aiService) {
@@ -502,8 +502,8 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-console.log('[Service] SimRacing Coach Service started');
-console.log('[Service] Waiting for adapter connection...');
+// console.log('[Service] SimRacing Coach Service started');
+// console.log('[Service] Waiting for adapter connection...');
 
 // Initialize LLM and Piper services
 (async () => {
@@ -517,17 +517,17 @@ console.log('[Service] Waiting for adapter connection...');
     llamaAgent.start().catch((e: Error) => console.error('[Service] LLM start error:', e));
     llamaAgent.setLanguage('es');
     */
-    console.log('[Service] ℹ️ LLM is disabled. Rules Engine will handle all coaching.');
+    // console.log('[Service] ℹ️ LLM is disabled. Rules Engine will handle all coaching.');
 
     // Initialize Piper (keep instance alive)
-    console.log('[Service] Starting Piper...');
+    // console.log('[Service] Starting Piper...');
     piperAgent = new PiperAgent();
     await piperAgent.initialize();
-    console.log('[Service] ✓ Piper ready');
+    console.log('[Service] ✅ Piper ready - Sistema iniciado');
 
     // Check if adapter is already connected and initialize AI if needed
     if (adapterStatus?.state === 'connected' && !aiService) {
-      console.log('[Service] Adapter already connected on startup - initializing AI');
+      // console.log('[Service] Adapter already connected on startup - initializing AI');
       aiService = new AICoachingService({
         enabled: true,
         mode: 'ai',
@@ -535,11 +535,11 @@ console.log('[Service] Waiting for adapter connection...');
           stt: 'es',
           tts: 'es'
         }
-      }, llamaAgent, piperAgent);
+      }, piperAgent);
 
       await aiService.initialize();
       aiInitialized = true;
-      console.log('[Service] ✓ AI Coaching Service ready on startup');
+      // console.log('[Service] ✓ AI Coaching Service ready on startup');
 
       // Start AI session
       aiService.startSession({
@@ -557,6 +557,6 @@ console.log('[Service] Waiting for adapter connection...');
       });
     }
   } catch (error) {
-    console.error('[Service] Failed to initialize AI services:', error);
+    // console.error('[Service] Failed to initialize AI services:', error);
   }
 })();

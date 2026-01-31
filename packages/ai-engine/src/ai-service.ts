@@ -3,6 +3,17 @@
  * Telemetry → Buffer (30s) → Rules Engine → TTS
  */
 
+// ═══════════════════════════════════════════════════════════════
+// DEBUG FLAGS - Cambiar a true para activar logs específicos
+// ═══════════════════════════════════════════════════════════════
+const DEBUG = {
+    LIFECYCLE: false,      // Logs de inicialización/destrucción
+    FRAME_PROCESSING: false, // Logs de processFrame (cada frame)
+    BUFFER: true,          // Logs del buffer (cada 30s) ✅ IMPORTANTE
+    GREETING: false        // Logs de saludos iniciales
+};
+// ═══════════════════════════════════════════════════════════════
+
 import type { TelemetryFrame } from '@simracing/core';
 import { PiperAgent } from './piper-agent.js';
 import { TelemetryRulesEngine } from './telemetry-rules-engine.js';
@@ -61,28 +72,28 @@ export class AICoachingService {
         this.config = { ...DEFAULT_CONFIG, ...config };
 
         if (externalTts) {
-            console.log('[AIService] Using external TTS agent');
+            if (DEBUG.LIFECYCLE) console.log('[AIService] Using external TTS agent');
             this.tts = externalTts;
             this.externalAgents = true;
         } else {
-            console.log('[AIService] Creating new TTS agent');
+            if (DEBUG.LIFECYCLE) console.log('[AIService] Creating new TTS agent');
             this.tts = new PiperAgent(this.config.tts);
             this.externalAgents = false;
         }
 
         this.rulesEngine = new TelemetryRulesEngine();
-        console.log('[AIService] ✓ Simple 30s Buffer System initialized');
+        if (DEBUG.LIFECYCLE) console.log('[AIService] ✓ Simple 30s Buffer System initialized');
     }
 
     async initialize(): Promise<void> {
-        console.log('[AIService] Initializing...');
+        if (DEBUG.LIFECYCLE) console.log('[AIService] Initializing...');
 
         try {
             if (!this.externalAgents) {
                 await this.tts.initialize();
             }
             this.initialized = true;
-            console.log('[AIService] ✓ Ready');
+            if (DEBUG.LIFECYCLE) console.log('[AIService] ✓ Ready');
         } catch (error) {
             console.error('[AIService] Failed to initialize:', error);
             throw error;
@@ -94,13 +105,13 @@ export class AICoachingService {
         this.frameBuffer = [];
         this.bufferStartTime = Date.now();
         this.hasGivenInitialGreeting = false;
-        console.log('[AIService] Session started');
+        if (DEBUG.LIFECYCLE) console.log('[AIService] Session started');
     }
 
     endSession(): void {
         this.sessionContext = null;
         this.frameBuffer = [];
-        console.log('[AIService] Session ended');
+        if (DEBUG.LIFECYCLE) console.log('[AIService] Session ended');
     }
 
     /**
@@ -110,17 +121,16 @@ export class AICoachingService {
      * 3. Clear buffer and repeat
      */
     async processFrame(frame: TelemetryFrame): Promise<void> {
-        // LOG SUPER VISIBLE para confirmar que esta version se ejecuta
-        if (Math.random() < 0.01) {
-            console.log('🟢🟢🟢 processFrame CALLED! 🟢🟢🟢');
+        if (DEBUG.FRAME_PROCESSING && Math.random() < 0.01) {
+            console.log('🟢 processFrame CALLED');
         }
 
         if (!this.initialized) {
-            console.log('[AIService] ⚠ processFrame skipped: not initialized');
+            if (DEBUG.FRAME_PROCESSING) console.log('[AIService] ⚠ processFrame skipped: not initialized');
             return;
         }
         if (!this.sessionContext) {
-            console.log('[AIService] ⚠ processFrame skipped: no session context');
+            if (DEBUG.FRAME_PROCESSING) console.log('[AIService] ⚠ processFrame skipped: no session context');
             return;
         }
 
@@ -130,28 +140,159 @@ export class AICoachingService {
         // Initialize buffer start time on first frame
         if (this.bufferStartTime === 0) {
             this.bufferStartTime = Date.now();
-            console.log('[Buffer] ▶ Buffer started, collecting frames for 30s...');
+            if (DEBUG.BUFFER) console.log('[Buffer] ▶ Buffer started, collecting frames for 30s...');
         }
 
-        // 2. Check for initial greeting (when speed > 5 kph)
-        const currentSpeed = frame.powertrain?.speedKph || 0;
-        if (!this.hasGivenInitialGreeting && currentSpeed > 5) {
-            this.hasGivenInitialGreeting = true;
-            console.log(`[AIService] 🏁 Speed detected: ${currentSpeed.toFixed(1)} kph - Greeting!`);
-            await this.giveInitialGreeting();
-        }
+        // 3. Check for immediate events (don't wait 30s for buffer)
+        await this.checkImmediateEvents(frame);
 
-        // 3. Log buffer progress every 5 seconds (~300 frames at 60fps)
+        // 4. Log buffer progress every 5 seconds (~300 frames at 60fps)
         const elapsed = Date.now() - this.bufferStartTime;
-        if (this.frameBuffer.length % 300 === 0) {
+        if (DEBUG.BUFFER && this.frameBuffer.length % 300 === 0) {
             const progress = Math.min(100, (elapsed / 30000) * 100);
             console.log(`[Buffer] 📊 frames=${this.frameBuffer.length}, elapsed=${(elapsed / 1000).toFixed(1)}s/30s (${progress.toFixed(0)}%), isProcessing=${this.isProcessingBuffer}`);
         }
 
-        // 4. Every 30 seconds, process buffer and send to rules engine
+        // 5. Every 30 seconds, process buffer and send to rules engine
         if (elapsed >= 30000 && !this.isProcessingBuffer) {
-            console.log(`[Buffer] ⏰ 30s reached! Calling processBufferAndSendToEngine...`);
+            if (DEBUG.BUFFER) console.log(`[Buffer] ⏰ 30s reached! Calling processBufferAndSendToEngine...`);
             await this.processBufferAndSendToEngine();
+        }
+    }
+
+    /**
+     * Check for immediate events that need instant announcement
+     * - Pit exit
+     * - Critical flags
+     */
+    private pitRoadState: boolean = false;
+
+    private async checkImmediateEvents(frame: TelemetryFrame): Promise<void> {
+        // 1. Check for pit exit (transition from pit road to track)
+        const currentOnPitRoad = frame.session?.onPitRoad || false;
+        const wasOnPitRoad = this.pitRoadState;
+
+        if (wasOnPitRoad && !currentOnPitRoad) {
+            console.log('🏁 [SALIDA DE PITS] Detectada - Anunciando mensaje motivador');
+
+            // Mensajes motivadores aleatorios
+            const greetings = [
+                "¡Dale dale! Te voy a estar mirando y te ayudo a mejorar.",
+                "¡Vamos vamos! Estoy acá con vos, te voy dando consejos.",
+                "¡Arrancamos! Concentrate en la pista que yo te voy guiando.",
+                "¡Dale que podés! Vamos por ese tiempazo, estoy con vos."
+            ];
+
+            const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+            await this.tts.speak(greeting, 'urgent');
+        }
+
+        // Update pit road state for next frame
+        this.pitRoadState = currentOnPitRoad;
+
+        // 2. Check for critical flags
+        const flags = frame.flags?.sessionFlags || 0;
+
+        const criticalFlags = [
+            { id: 'black', bit: 0x00000080, message: '¡Bandera negra! Tenés una sanción, entrá a boxes.' },
+            { id: 'meatball', bit: 0x00002000, message: '¡Bandera técnica! El auto está dañado, entrá a boxes ya.' },
+            { id: 'yellow', bit: 0x00000008, message: 'Bandera amarilla, bajá la velocidad y cuidado.' },
+            { id: 'blue', bit: 0x00000010, message: 'Bandera azul, dejá pasar al auto de atrás.' }
+        ];
+
+        for (const flag of criticalFlags) {
+            const isActive = (flags & flag.bit) !== 0;
+            const wasActive = this.activeFlagsState.get(flag.id) || false;
+
+            // Edge detection: announce only when flag transitions from OFF to ON
+            if (isActive && !wasActive) {
+                console.log(`🚩 [BANDERA CRÍTICA] ${flag.id.toUpperCase()} detectada - Anunciando (primera vez)`);
+                await this.tts.speak(flag.message, 'urgent');
+            }
+
+            // Update state for next frame
+            this.activeFlagsState.set(flag.id, isActive);
+        }
+    }
+
+    /**
+     * OLD METHOD - Kept for reference
+     * Check for critical flags that need immediate announcement
+     * Uses edge detection: only announces when flag transitions from OFF to ON
+     */
+    private activeFlagsState: Map<string, boolean> = new Map();
+
+    private async checkCriticalFlags(frame: TelemetryFrame): Promise<void> {
+        const flags = frame.flags?.sessionFlags || 0;
+
+        // Define critical flags with their announcements
+        const criticalFlags = [
+            { id: 'black', bit: 0x00000080, message: '¡Bandera negra! Tenés una sanción, entrá a boxes.' },
+            { id: 'meatball', bit: 0x00002000, message: '¡Bandera técnica! El auto está dañado, entrá a boxes ya.' },
+            { id: 'yellow', bit: 0x00000008, message: 'Bandera amarilla, bajá la velocidad y cuidado.' },
+            { id: 'blue', bit: 0x00000010, message: 'Bandera azul, dejá pasar al auto de atrás.' }
+        ];
+
+        for (const flag of criticalFlags) {
+            const isActive = (flags & flag.bit) !== 0;
+            const wasActive = this.activeFlagsState.get(flag.id) || false;
+
+            // DEBUG: Ver qué está pasando con el estado
+            if (isActive) {
+                console.log(`🔍 DEBUG ${flag.id}: isActive=${isActive}, wasActive=${wasActive}, Map size=${this.activeFlagsState.size}`);
+            }
+
+            // Edge detection: announce only when flag transitions from OFF to ON
+            if (isActive && !wasActive) {
+                console.log(`🚩 [BANDERA CRÍTICA] ${flag.id.toUpperCase()} detectada - Anunciando (primera vez)`);
+                await this.tts.speak(flag.message, 'urgent');
+            }
+
+            // Update state for next frame
+            this.activeFlagsState.set(flag.id, isActive);
+            console.log(`✅ DEBUG AFTER SET: ${flag.id} = ${this.activeFlagsState.get(flag.id)}, Map size=${this.activeFlagsState.size}`);
+        }
+    }
+
+    /**
+     * Check if car is stopped/in pits and motivate driver to start
+     */
+    private lastStoppedAnnouncement: number = 0;
+    private stoppedSince: number = 0;
+
+    private async checkIfStoppedAndMotivate(frame: TelemetryFrame): Promise<void> {
+        const speedKph = frame.powertrain?.speedKph || 0;
+        const now = Date.now();
+
+        // Si el auto está en movimiento, resetear
+        if (speedKph >= 5) {
+            this.stoppedSince = 0;
+            return;
+        }
+
+        // Si acaba de pararse, marcar el inicio
+        if (this.stoppedSince === 0) {
+            this.stoppedSince = now;
+            return;
+        }
+
+        // Calcular cuánto tiempo lleva parado
+        const stoppedDuration = now - this.stoppedSince;
+        const timeSinceLastAnnouncement = now - this.lastStoppedAnnouncement;
+
+        // Si lleva más de 5 segundos parado Y pasaron al menos 30 segundos desde el último anuncio
+        if (stoppedDuration > 5000 && timeSinceLastAnnouncement > 30000) {
+            const messages = [
+                "Dale, acelerá que arrancamos!",
+                "Vamos, salí a pista que te estoy esperando!",
+                "Largá el freno y vamos, que hay que rodar!",
+                "Che, arrancá que se enfría todo!"
+            ];
+
+            const message = messages[Math.floor(Math.random() * messages.length)];
+            console.log(`🏁 [AUTO PARADO] Motivando al piloto: "${message}"`);
+            await this.tts.speak(message, 'normal');
+            this.lastStoppedAnnouncement = now;
         }
     }
 
@@ -195,8 +336,31 @@ export class AICoachingService {
             console.log(`   ThrottleChanges: ${analysis.patterns.throttleChanges}`);
             console.log(`   AvgSpeed: ${Math.round(analysis.averages.speed)} kph`);
 
+            // DEBUG: Ver qué datos de temperaturas y RPM están llegando
+            console.log(`\n🔍 DEBUG - Datos del frame actual:`);
+            console.log(`   RPM: ${lastFrame?.powertrain?.rpm || 'N/A'}`);
+            console.log(`   Water temp: ${lastFrame?.temps?.waterC || 'N/A'}°C`);
+            console.log(`   Oil temp: ${lastFrame?.temps?.oilC || 'N/A'}°C`);
+            console.log(`   Tyre temps: ${lastFrame?.temps?.tyreC?.join(', ') || 'N/A'}`);
+            console.log(`   Brake temps: ${lastFrame?.temps?.brakeC?.join(', ') || 'N/A'}`);
+
+            // DEBUG: Guardar buffer completo en archivo para análisis
+            const fs = await import('fs');
+            const path = await import('path');
+            const timestamp = new Date().toISOString().replace(/:/g, '-');
+            const bufferFile = path.join(process.cwd(), `buffer-${timestamp}.json`);
+            const bufferData = {
+                timestamp: new Date().toISOString(),
+                frameCount: this.frameBuffer.length,
+                analysis,
+                frames: this.frameBuffer,
+                lastFrame
+            };
+            fs.writeFileSync(bufferFile, JSON.stringify(bufferData, null, 2));
+            console.log(`\n💾 Buffer guardado en: ${bufferFile}`);
+
             // Get ALL matching rules from rules engine (sorted by priority)
-            const allRules = this.rulesEngine.analyzeAll(analysis, 20);
+            const allRules = this.rulesEngine.analyzeAll(analysis, 50); // Pedir hasta 50 reglas (devuelve TODAS)
 
             if (allRules.length > 0) {
                 console.log(`\n🎯 REGLAS ACTIVADAS (${allRules.length} total):`);
@@ -214,7 +378,7 @@ export class AICoachingService {
                 const MAX_CONSEJOS = 4;
                 const topRules = allRules.slice(0, MAX_CONSEJOS);
 
-                console.log(`\n🔊 HABLANDO ${topRules.length} consejos:`);
+                console.log(`\n🔊 HABLANDO ${topRules.length} consejos (de ${allRules.length} total):`);
                 for (const rule of topRules) {
                     console.log(`   -> "${rule.advice}" (${rule.ruleId})`);
                     await this.tts.speak(rule.advice, 'normal');
@@ -246,12 +410,12 @@ export class AICoachingService {
             ];
 
             const greeting = greetings[Math.floor(Math.random() * greetings.length)];
-            console.log(`[AIService] 🎯 GREETING: "${greeting}"`);
+            if (DEBUG.GREETING) console.log(`[AIService] 🎯 GREETING: "${greeting}"`);
 
             await this.tts.speak(greeting, 'normal');
-            console.log('[AIService] ✅ Greeting spoken');
+            if (DEBUG.GREETING) console.log('[AIService] ✅ Greeting spoken');
         } catch (error) {
-            console.error('[AIService] Greeting failed:', error);
+            if (DEBUG.GREETING) console.error('[AIService] Greeting failed:', error);
         }
     }
 
@@ -259,7 +423,7 @@ export class AICoachingService {
         this.config.language.stt = language;
         this.config.language.tts = language;
         this.tts.setLanguage(language);
-        console.log(`[AIService] Language changed to: ${language}`);
+        if (DEBUG.LIFECYCLE) console.log(`[AIService] Language changed to: ${language}`);
     }
 
     getStatus() {
@@ -275,7 +439,7 @@ export class AICoachingService {
     async dispose(): Promise<void> {
         await this.tts.dispose();
         this.initialized = false;
-        console.log('[AIService] Disposed');
+        if (DEBUG.LIFECYCLE) console.log('[AIService] Disposed');
     }
 }
 

@@ -135,15 +135,15 @@ async function loop(sdk) {
                 is_replay_playing: getValue(telemetry.IsReplayPlaying)
             };
 
-            // Debug logging for SessionFlags (remove after debugging)
-            if (data.session_flags_raw !== null && data.session_flags_raw !== 0) {
-                log(`SessionFlags detected: ${data.session_flags_raw} (0x${data.session_flags_raw.toString(16).toUpperCase()})`);
-            }
+            // Debug logging for SessionFlags (commented for clean output)
+            // if (data.session_flags_raw !== null && data.session_flags_raw !== 0) {
+            //     log(`SessionFlags detected: ${data.session_flags_raw} (0x${data.session_flags_raw.toString(16).toUpperCase()})`);
+            // }
 
-            // DEBUG: Confirm we're emitting frames
-            if (data.speed_mps !== null && data.speed_mps !== undefined) {
-                log(`EMITTING FRAME - Speed: ${data.speed_mps} m/s`);
-            }
+            // DEBUG: Confirm we're emitting frames (commented for clean output)
+            // if (data.speed_mps !== null && data.speed_mps !== undefined) {
+            //     log(`EMITTING FRAME - Speed: ${data.speed_mps} m/s`);
+            // }
 
             emit({ type: 'frame', sim, ts: now, data });
         } catch (error) {

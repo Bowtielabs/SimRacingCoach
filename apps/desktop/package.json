@@ -22,7 +22,7 @@
     "@types/electron": "^1.6.12",
     "@types/node": "^20.14.10",
     "concurrently": "^8.2.2",
-    "electron": "^31.2.0",
+    "electron": "^30.5.1",
     "electron-builder": "^26.4.0",
     "fs-extra": "^11.2.0",
     "typescript": "^5.5.4",

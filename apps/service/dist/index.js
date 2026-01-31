@@ -40,15 +40,11 @@ function handleAdapterFrame(message) {
     latestFrameTime = message.ts;
     fpsTracker.tick();
     const data = message.data;
-    // DEBUG: Log first frame to check initialization conditions
-    if (Math.random() < 0.001) { // Log 0.1% of frames to avoid spam
-        console.log('[Service] Frame handler debug:', {
-            aiService: !!aiService,
-            adapterState: adapterStatus?.state,
-            willInitializeAI: !aiService && adapterStatus?.state === 'connected'
-        });
-    }
     // Initialize AI if not already done, adapter is connected, AND piperAgent is ready
+    // DEBUG: Log para ver por qué no se inicializa
+    if (Math.random() < 0.01) {
+        console.log(`[Service] AI init check: aiService=${!!aiService}, adapterConnected=${adapterStatus?.state === 'connected'}, piperAgent=${!!piperAgent}`);
+    }
     if (!aiService && adapterStatus?.state === 'connected' && piperAgent) {
         console.log('[Service] 🤖 Initializing AI Coaching Service (from frame handler)...');
         // Pass external agents to avoid duplicate server initialization
@@ -59,7 +55,7 @@ function handleAdapterFrame(message) {
                 stt: 'es',
                 tts: 'es'
             }
-        }, llamaAgent, piperAgent);
+        }, piperAgent);
         aiService.initialize()
             .then(() => {
             aiInitialized = true;
@@ -153,11 +149,16 @@ function handleAdapterFrame(message) {
     };
     // Send to AI service
     if (aiService && aiInitialized) {
-        // No logging here to avoid spam - logs are in AIService
         aiService.processFrame(frame).catch((err) => {
             logger.error({ err }, 'AI processing failed');
             console.error('[Service] ❌ AI processing error:', err);
         });
+    }
+    else if (aiService && !aiInitialized) {
+        // Log ocasional para debug
+        if (Math.random() < 0.01) {
+            console.log('[Service] ⏳ aiService exists but not initialized yet');
+        }
     }
     telemetryBuffer.push(frame);
     if (telemetryBuffer.length > 1000) {
@@ -193,7 +194,7 @@ function handleAdapterStatus(message) {
                     stt: 'es',
                     tts: 'es'
                 }
-            }, llamaAgent, piperAgent);
+            }, piperAgent);
             aiService.initialize()
                 .then(() => {
                 aiInitialized = true;
@@ -254,12 +255,16 @@ function startAdapter(which) {
         logger.error({ which }, 'unknown adapter');
         return;
     }
-    const resolveCommand = (id) => spec;
+    // Determinar el path del adapter basado en el ID
+    const adapterPath = which === 'mock-iracing'
+        ? path.join(process.cwd(), '../adapters/mock-iracing/adapter.js')
+        : path.join(process.cwd(), '../adapters/iracing-node/adapter.mjs');
+    console.log(`[Service] 🔌 Starting adapter: ${which} from ${adapterPath}`);
     adapterSupervisor = new AdapterSupervisor({
         adapterId: which,
         resolveCommand: async () => ({
             command: 'node',
-            args: [path.join(process.cwd(), '../adapters/iracing-node/adapter.mjs')],
+            args: [adapterPath],
             env: {},
             cwd: process.cwd()
         })
@@ -451,7 +456,7 @@ console.log('[Service] Waiting for adapter connection...');
                     stt: 'es',
                     tts: 'es'
                 }
-            }, llamaAgent, piperAgent);
+            }, piperAgent);
             await aiService.initialize();
             aiInitialized = true;
             console.log('[Service] ✓ AI Coaching Service ready on startup');
