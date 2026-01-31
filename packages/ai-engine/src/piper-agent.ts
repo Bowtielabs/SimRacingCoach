@@ -25,8 +25,8 @@ const DEFAULT_CONFIG: TTSConfig = {
     modelPath: VOICE_PATH,
     language: 'es',
     voice: 'es_AR-daniela',
-    speed: 1.0,
-    volume: 0.8
+    speed: 3.5,  // Fast speech for quick in-race feedback (max 3s per message)
+    volume: 1.0  // Maximum volume for better audibility
 };
 
 /**
@@ -97,10 +97,27 @@ export class PiperAgent {
         const startTime = Date.now();
         console.log(`[Piper] 🔊 Speaking: "${text.substring(0, 50)}..."`);
 
-        const lengthScale = 1.0 / speed;
-        const pcmChunks: Buffer[] = [];
-
         try {
+            // ⚡ PRERENDERED AUDIO - INSTANT PLAYBACK
+            const prerenderedPath = this.getPrerenderedPath(text);
+
+            if (prerenderedPath) {
+                console.log(`[Piper] ⚡ Using prerendered: ${path.basename(prerenderedPath)}`);
+                soundPlay.play(prerenderedPath, this.config.volume);
+
+                // Conservative wait time for all prerendered messages (~2.5s max duration + buffer)
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                const totalTime = Date.now() - startTime;
+                console.log(`[Piper] ✅ ${totalTime}ms (prerendered)`);
+                return prerenderedPath;
+            }
+
+            // FALLBACK: Synthesize if not prerendered
+            console.log(`[Piper] ⚠️ Not prerendered, synthesizing...`);
+
+            const lengthScale = 1.0 / speed;
+            const pcmChunks: Buffer[] = [];
             // Log the actual piper path and args for debugging
             const piperArgs = [
                 '--model', this.config.modelPath,
@@ -152,12 +169,16 @@ export class PiperAgent {
 
             // Play with sound-play (starts immediately, returns before done)
             const playStart = Date.now();
+            console.log(`[Piper] 🔊 Reproduciendo audio: ${tempWav} (${Math.round(audioDurationMs / 1000)}s, vol: ${this.config.volume})`);
             soundPlay.play(tempWav, this.config.volume);
 
-            // Wait for audio to finish
-            await new Promise(resolve => setTimeout(resolve, audioDurationMs + 200));
+            // Wait for audio to finish + extra buffer for sound-play Windows quirks
+            await new Promise(resolve => setTimeout(resolve, audioDurationMs + 1000));
 
             const playTime = Date.now() - playStart;
+
+            // Extra delay before cleanup to ensure sound-play is done with the file
+            await new Promise(resolve => setTimeout(resolve, 500));
             await unlink(tempWav).catch(() => { });
 
             const totalTime = Date.now() - startTime;
@@ -183,6 +204,50 @@ export class PiperAgent {
         } catch (error) {
             next.reject(error as Error);
         }
+    }
+
+    /**
+     * Get path to prerendered audio file if it exists for this exact message
+     */
+    private getPrerenderedPath(text: string): string | null {
+        // Map exact text to prerendered filename (rule ID)
+        const MESSAGE_TO_FILE: Record<string, string> = {
+            'Entrada de potencia muy brusca, aplicá el acelerador más gradual': 'throttle-punch',
+            'Demasiado movimiento en los pedales, suavizá las transiciones': 'pedal-fidgeting',
+            'Estás pisando freno y acelerador al mismo tiempo, es ineficiente': 'brake-riding',
+            'Frenadas muy suaves, metele más presión inicial': 'soft-braking',
+            'Frenadas muy bruscas, graduar mejor la presión del pedal': 'brake-stomp',
+            'Estás demorando mucho en acelerar después del apex, dale antes': 'lazy-throttle',
+            'Estás yendo mucho en vacío, perdés tiempo sin acelerar ni frenar': 'coasting-too-much',
+            'Levantás mucho el acelerador en los cambios, perdés potencia': 'throttle-overlap',
+            'Te falta trail braking, soltá el freno gradual mientras girás': 'unfinished-braking',
+            'Frenadas inconsistentes, buscá puntos de referencia fijos': 'brake-inconsistency',
+            'Estás colgado del limitador, cambiá antes para mantener potencia': 'redline-hanging',
+            'Cambios muy prematuros, aprovechá más el rango de RPM': 'early-short-shift',
+            'Mucho freno motor, cuidado con romper el cambio': 'engine-braking-risk',
+            'Estás en punto muerto andando, enganchá una marcha': 'neutral-driving',
+            'Cambios muy lentos, practicá la velocidad de palanca': 'slow-shifts',
+            'Marcha muy larga para curva lenta, bajá una más': 'wrong-gear-slow-corner',
+            'No estás haciendo punta-tacón, igualá las RPM en la bajada': 'no-rev-match',
+            '¡Warning del motor detectado! Revisá la telemetría': 'engine-warnings-detected',
+            'Gomas muy frías (menos de 65°C), hacé serpentinas': 'tyres-too-cold',
+            'Neumáticos sobrecalentados (más de 100°C), reducí agresividad': 'tyres-overheating',
+            'Desbalance térmico izquierda/derecha en gomas, revisá setup': 'thermal-imbalance-lr',
+            'Desbalance térmico delantero/trasero, ajustá balance aerodinámico': 'thermal-imbalance-fb',
+            'Frenos a más de 400°C, peligro de fatiga por calor': 'brake-fade',
+            'Motor frío con mucha exigencia, cuidado que el aceite está frío': 'cold-engine-stress',
+            'Temperatura de agua crítica (más de 105°C), levantá que se recalienta': 'water-overheating',
+            'Velocidad de punta inconsistente, mantené el gas a fondo en recta': 'top-speed-inconsistency',
+            'Variaciones erráticas de velocidad en recta, suavizá': 'erratic-speed-variation',
+            'Consumo de combustible ineficiente, levantá antes de frenar': 'inefficient-fuel-consumption',
+            '¡Menos de 5 litros de nafta! Entrá a boxes o gestioná': 'fuel-critical-low',
+            '¡Riesgo de calado! RPM muy bajas, bajá de marcha o acelerá': 'stalling-risk'
+        };
+
+        const filename = MESSAGE_TO_FILE[text];
+        if (!filename) return null;
+
+        return path.join(__dirname, `../../../core/ai_engines/piper/prerendered/${filename}.wav`);
     }
 
     async interrupt(): Promise<void> {
