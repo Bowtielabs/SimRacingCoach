@@ -110,10 +110,10 @@ function startTelemetry() {
             fuel_level_pct: cycle >= 250 ? 0.08 : (frame.fuel?.levelPct || 0),
             fuel_use_per_hour: frame.fuel?.usePerHour || 0,
 
-            // Pit & Garage - INYECTAR SALIDA DE PITS
-            on_pit_road: (cycle >= 30 && cycle < 80), // ⚠️ EN PITS frames 30-80, luego SALE
+            // Pit & Garage - INYECTAR SALIDA DE PITS SOLO UNA VEZ AL PRINCIPIO
+            on_pit_road: (frameIndex >= 30 && frameIndex < 80), // ⚠️ EN PITS frames 30-80 ABSOLUTO, luego SALE (solo primera vez)
             in_garage: false,
-            is_on_track: !(cycle >= 30 && cycle < 80), // Fuera de pista cuando está en pits
+            is_on_track: !(frameIndex >= 30 && frameIndex < 80), // Fuera de pista cuando está en pits
 
             // Lap times
             lap_times: {

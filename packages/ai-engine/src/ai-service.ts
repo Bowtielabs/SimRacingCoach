@@ -158,9 +158,6 @@ export class AICoachingService {
             if (DEBUG.BUFFER) console.log('[Buffer] ▶ Buffer started, collecting frames for 30s...');
         }
 
-        // 3. Check for immediate events (don't wait 30s for buffer)
-        await this.checkImmediateEvents(frame);
-
         // 4. Log buffer progress every 5 seconds (~300 frames at 60fps)
         const elapsed = Date.now() - this.bufferStartTime;
         if (DEBUG.BUFFER && this.frameBuffer.length % 300 === 0) {
@@ -176,63 +173,6 @@ export class AICoachingService {
     }
 
     /**
-     * Check for immediate events that need instant announcement
-     * - Pit exit
-     * - Critical flags
-     */
-    private pitRoadState: boolean = false;
-
-    private async checkImmediateEvents(frame: TelemetryFrame): Promise<void> {
-        // 1. Check for pit exit (transition from pit road to track)
-        const currentOnPitRoad = frame.session?.onPitRoad || false;
-        const wasOnPitRoad = this.pitRoadState;
-
-        if (wasOnPitRoad && !currentOnPitRoad) {
-            console.log('🏁 [SALIDA DE PITS] Detectada - Anunciando mensaje motivador');
-
-            // Mensajes motivadores aleatorios
-            const greetings = [
-                "greeting-1",
-                "greeting-2",
-                "greeting-3",
-                "greeting-4"
-            ];
-
-            const greeting = greetings[Math.floor(Math.random() * greetings.length)];
-            await this.tts.speak(greeting, 'urgent');
-        }
-
-        // Update pit road state for next frame
-        this.pitRoadState = currentOnPitRoad;
-
-        // 2. Check for critical flags
-        const flags = frame.flags?.sessionFlags || 0;
-
-        const criticalFlags = [
-            { id: 'black', bit: 0x00000080, message: '¡Bandera negra! Tenés una sanción, entrá a boxes.' },
-            { id: 'meatball', bit: 0x00002000, message: '¡Bandera técnica! El auto está dañado, entrá a boxes ya.' },
-            { id: 'yellow', bit: 0x00000008, message: 'Bandera amarilla, bajá la velocidad y cuidado.' },
-            { id: 'blue', bit: 0x00000010, message: 'Bandera azul, dejá pasar al auto de atrás.' }
-        ];
-
-        for (const flag of criticalFlags) {
-            const isActive = (flags & flag.bit) !== 0;
-            const wasActive = this.activeFlagsState.get(flag.id) || false;
-
-            // Edge detection: announce only when flag transitions from OFF to ON
-            if (isActive && !wasActive) {
-                console.log(`🚩 [BANDERA CRÍTICA] ${flag.id.toUpperCase()} detectada - Anunciando (primera vez)`);
-                await this.tts.speak(flag.message, 'urgent');
-            }
-
-            // Update state for next frame
-            this.activeFlagsState.set(flag.id, isActive);
-        }
-    }
-
-    /**
-     * OLD METHOD - Kept for reference
-     * Check for critical flags that need immediate announcement
      * Uses edge detection: only announces when flag transitions from OFF to ON
      */
     private activeFlagsState: Map<string, boolean> = new Map();

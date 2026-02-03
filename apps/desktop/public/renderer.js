@@ -19,6 +19,7 @@ const elements = {
   stopBtn: document.getElementById('stop-btn'),
   statusIndicator: document.getElementById('status-indicator'),
   statusText: document.getElementById('status-text'),
+  speakingIndicator: document.getElementById('speaking-indicator')
 };
 
 // Load translation files
@@ -91,22 +92,22 @@ function mapToAILanguage(uiLang) {
   return map[uiLang] || 'es';
 }
 
-// Load config from backend
+// Load and apply saved configuration
 async function loadConfig() {
   try {
-    const config = await window.api.getConfig();
+    const config = await window.api.loadConfig();
+    console.log('[Renderer] Loaded config:', config);
 
-    elements.simulatorSelect.value = config.adapter?.id || 'iracing';
-    currentLanguage = config.language?.split('-')[0] || 'es';
-    elements.languageSelect.value = currentLanguage;
-
-    // Speed is stored as rate (-10 to +10), convert to multiplier (0.5 to 2.0)
-    const rate = config.voice?.rate || 0;
-    const speed = 1.0 + (rate / 10);
-    elements.speedSlider.value = speed.toFixed(1);
-    elements.speedValue.textContent = speed.toFixed(1) + 'x';
-
-    await applyLanguage(currentLanguage);
+    if (config) {
+      if (elements.simulatorSelect && config.adapterId) {
+        elements.simulatorSelect.value = config.adapterId;
+      }
+      if (elements.languageSelect && config.language) {
+        currentLanguage = config.language;
+        elements.languageSelect.value = config.language;
+        await applyLanguage(config.language);
+      }
+    }
   } catch (err) {
     console.error('Failed to load config:', err);
   }
@@ -198,8 +199,12 @@ elements.runBtn.addEventListener('click', async () => {
     });
 
     isRunning = true;
-    elements.runBtn.classList.add('hidden');
-    elements.stopBtn.classList.remove('hidden');
+
+    // Switch to coaching screen
+    document.getElementById('config-screen').classList.remove('active');
+    document.getElementById('coaching-screen').classList.add('active');
+    document.body.classList.add('coaching-active');
+
     updateStatus({ state: 'running', sim: elements.simulatorSelect.value });
     startStatusPolling();
   } catch (err) {
@@ -213,14 +218,22 @@ elements.stopBtn.addEventListener('click', async () => {
     await window.api.stopService();
 
     isRunning = false;
-    elements.stopBtn.classList.add('hidden');
-    elements.runBtn.classList.remove('hidden');
+
+    // Switch back to config screen
+    document.getElementById('coaching-screen').classList.remove('active');
+    document.getElementById('config-screen').classList.add('active');
+    document.body.classList.remove('coaching-active');
+
     updateStatus({ state: 'disconnected' });
     stopStatusPolling();
-    document.getElementById('coach-state').textContent = 'Inactivo';
+
+    // Reset coaching screen
+    document.getElementById('coach-state').textContent = 'Activo';
     document.getElementById('buffer-progress').style.width = '0%';
-    document.getElementById('buffer-text').textContent = '0/600';
+    document.getElementById('buffer-text').textContent = '0/300';
     document.getElementById('last-recommendation').style.display = 'none';
+    const audioWaves = document.getElementById('audio-waves');
+    if (audioWaves) audioWaves.style.display = 'none';
     document.getElementById('speaking-indicator').style.display = 'none';
   } catch (err) {
     console.error('Failed to stop:', err);
@@ -263,6 +276,7 @@ function stopStatusPolling() {
 
 function updateCoachPanel(status) {
   const coachState = document.getElementById('coach-state');
+  const audioWaves = document.getElementById('audio-waves');
   const bufferProgress = document.getElementById('buffer-progress');
   const bufferText = document.getElementById('buffer-text');
   const lastRecPanel = document.getElementById('last-recommendation');
@@ -270,31 +284,41 @@ function updateCoachPanel(status) {
   const recText = document.getElementById('rec-text');
   const recTime = document.getElementById('rec-time');
 
+  // Update coach state and show audio waves when speaking
   if (status.sessionActive) {
-    coachState.textContent = status.buffer?.progress < 100 ? 'Acumulando datos...' : 'Analizando telemetría';
-    coachState.style.color = '#4ade80';
+    coachState.textContent = 'Activo';
+    coachState.style.color = '#00ff88';
+    coachState.classList.add('status-active');
+
+    // Show audio waves when coach is speaking
+    if (audioWaves && status.audio?.isSpeaking) {
+      audioWaves.style.display = 'flex';
+    } else if (audioWaves) {
+      audioWaves.style.display = 'none';
+    }
   } else {
     coachState.textContent = 'Inactivo';
     coachState.style.color = '#94a3b8';
+    coachState.classList.remove('status-active');
+    if (audioWaves) audioWaves.style.display = 'none';
   }
 
+  // Update buffer display (now shows 0/300 instead of 0/600)
   if (status.buffer) {
     const progress = status.buffer.progress || 0;
     bufferProgress.style.width = `${progress}%`;
-    bufferText.textContent = `${status.buffer.size}/${status.buffer.target}`;
-    if (status.buffer.secondsToAnalysis > 0) {
-      bufferText.textContent += ` (${status.buffer.secondsToAnalysis}s)`;
-    }
+    bufferText.textContent = `${status.buffer.size}/300`;
   } else {
     bufferProgress.style.width = '0%';
-    bufferText.textContent = '0/600';
+    bufferText.textContent = '0/300';
   }
 
-  if (status.lastRecommendation) {
-    const rec = status.lastRecommendation;
+  // Update last recommendation with timestamp
+  if (status.ai?.lastRecommendation) {
+    const rec = status.ai.lastRecommendation;
     lastRecPanel.style.display = 'flex';
     const categoryIcons = { technique: '🎯', engine: '⚙️', brakes: '🔴', tyres: '🛞', strategy: '🧠', track: '🏁' };
-    recIcon.textContent = categoryIcons[rec.category] || '💬';
+    if (recIcon) recIcon.textContent = categoryIcons[rec.category] || '💬';
     recText.textContent = rec.advice;
     const secondsAgo = Math.floor((Date.now() - rec.timestamp) / 1000);
     recTime.textContent = secondsAgo < 60 ? `Hace ${secondsAgo}s` : `Hace ${Math.floor(secondsAgo / 60)}m`;

@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title data-i18n="app.title">SimRacing AI Coach</title>
+  <title>SimRacing AI Coach</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -25,109 +25,109 @@
             </linearGradient>
           </defs>
         </svg>
-        <h1 data-i18n="app.title">SimRacing AI Coach</h1>
+        <h1>SimRacing AI Coach</h1>
       </div>
       <div class="status-indicator" id="status-indicator">
         <div class="status-dot"></div>
-        <span id="status-text" data-i18n="status.disconnected">Desconectado</span>
+        <span id="status-text">Desconectado</span>
       </div>
     </header>
 
-    <main class="main-content">
-      <div class="card">
-        <div class="form-group">
-          <label for="simulator-select" data-i18n="config.simulator">Simulador</label>
-          <select id="simulator-select" class="select-input">
-            <option value="iracing" data-i18n="simulators.iracing">iRacing</option>
-            <option value="mock-iracing">iRacing (Mock/Test)</option>
-            <option value="simutc" data-i18n="simulators.actc">Turismo Carretera (ACTC)</option>
-            <option value="acc" data-i18n="simulators.acc">Assetto Corsa Competizione</option>
-            <option value="ac" data-i18n="simulators.ac">Assetto Corsa</option>
-            <option value="rfactor" data-i18n="simulators.rfactor">rFactor</option>
-            <option value="rf2" data-i18n="simulators.rf2">rFactor 2</option>
-            <option value="ams2" data-i18n="simulators.ams2">Automobilista 2</option>
-          </select>
+    <main class="main">
+      <!-- SCREEN 1: Configuration -->
+      <section id="config-screen" class="screen active">
+        <div class="card">
+          <div class="form-group">
+            <label for="simulator-select">Simulador</label>
+            <select id="simulator-select" class="select-input">
+              <option value="iracing">iRacing</option>
+              <option value="mock-iracing">iRacing (Mock/Test)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="language-select">Idioma</label>
+            <select id="language-select" class="select-input">
+              <option value="es">Español</option>
+              <option value="en">English</option>
+              <option value="pt">Português</option>
+            </select>
+          </div>
+
+          <button id="test-voice-btn" class="btn btn-secondary">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
+            </svg>
+            <span>Probar Voz</span>
+          </button>
+
+          <button id="run-btn" class="btn btn-primary">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            <span>INICIAR COACHING</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- SCREEN 2: Coaching (EXACT MOCKUP) -->
+      <section id="coaching-screen" class="screen">
+        <div class="coach-panel-mockup">
+          <div class="panel-header-mockup">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#667eea" stroke-width="2">
+              <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z" />
+            </svg>
+            <h3>Estado del Coach</h3>
+          </div>
+
+          <div class="panel-rows">
+            <!-- Row 1: Estado -->
+            <div class="panel-row">
+              <span class="row-label">Estado:</span>
+              <div class="row-value-container">
+                <span class="estado-activo" id="coach-state">Activo</span>
+                <div class="audio-waves-mockup" id="audio-waves" style="display: none;">
+                  <div class="wave-bar"></div>
+                  <div class="wave-bar"></div>
+                  <div class="wave-bar"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Row 2: Leyendo datos -->
+            <div class="panel-row">
+              <span class="row-label">Leyendo datos</span>
+              <div class="progress-container">
+                <div class="progress-bar-mockup">
+                  <div class="progress-fill-mockup" id="buffer-progress" style="width: 65%"></div>
+                </div>
+                <span class="frames-counter" id="buffer-text">195/300 frames</span>
+              </div>
+            </div>
+
+            <!-- Row 3: Última Recomendación -->
+            <div class="ultima-recomendacion-mockup" id="last-recommendation">
+              <div class="rec-label-small">Última Recomendación</div>
+              <div class="rec-content-mockup">
+                <div class="rec-icon-mockup" id="rec-icon">🔴</div>
+                <div class="rec-text-container">
+                  <p class="rec-message" id="rec-text">Gomas muy frías (menos de 65°C), hacé serpentinas</p>
+                  <span class="rec-timestamp" id="rec-time">Hace 12s</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="form-group">
-          <label for="language-select" data-i18n="config.language">Idioma</label>
-          <select id="language-select" class="select-input">
-            <option value="es" data-i18n="languages.es">Español</option>
-            <option value="en" data-i18n="languages.en">English</option>
-            <option value="pt" data-i18n="languages.pt">Português</option>
-            <option value="fr" data-i18n="languages.fr">Français</option>
-            <option value="it" data-i18n="languages.it">Italiano</option>
-          </select>
-        </div>
-
-
-        <button id="test-voice-btn" class="btn btn-secondary">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M10 3a2 2 0 00-2 2v6a2 2 0 104 0V5a2 2 0 00-2-2z" />
-            <path d="M14 9a4 4 0 11-8 0" stroke="currentColor" stroke-width="2" fill="none" />
-          </svg>
-          <span data-i18n="config.testVoice">Probar Voz</span>
-        </button>
-
-        <button id="run-btn" class="btn btn-primary">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-          <span data-i18n="config.run">INICIAR COACHING</span>
-        </button>
-
-        <button id="stop-btn" class="btn btn-danger hidden">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+        <!-- DETENER Button -->
+        <button id="stop-btn" class="btn-detener-mockup">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <rect x="6" y="6" width="12" height="12" />
           </svg>
-          <span data-i18n="config.stop">DETENER</span>
+          <span>DETENER</span>
         </button>
-      </div>
-
-      <!-- Coach Status Panel -->
-      <div class="coach-status-panel" id="coach-status-panel">
-        <div class="panel-header">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z" />
-          </svg>
-          <h3>Estado del Coach</h3>
-        </div>
-
-        <div class="panel-content">
-          <div class="status-row">
-            <span class="label">Estado:</span>
-            <span class="value" id="coach-state">Inactivo</span>
-          </div>
-
-          <div class="status-row">
-            <span class="label">Buffer:</span>
-            <div class="progress-bar">
-              <div class="progress-fill" id="buffer-progress" style="width: 0%"></div>
-            </div>
-            <span class="value" id="buffer-text">0/600</span>
-          </div>
-
-          <div class="last-recommendation" id="last-recommendation" style="display: none;">
-            <div class="rec-icon" id="rec-icon">🎯</div>
-            <div class="rec-content">
-              <p class="rec-text" id="rec-text">Esperando telemetría...</p>
-              <span class="rec-time" id="rec-time"></span>
-            </div>
-          </div>
-        </div>
-      </div>
+      </section>
     </main>
-
-    <!-- Speaking Indicator (floating) -->
-    <div class="speaking-indicator" id="speaking-indicator" style="display: none;">
-      <div class="pulse-ring"></div>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-        <path
-          d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-      </svg>
-      <span>Coach hablando...</span>
-    </div>
 
     <footer class="footer">
       <p>Powered by AI • <span id="ai-status">Llama 3.2 1B</span></p>

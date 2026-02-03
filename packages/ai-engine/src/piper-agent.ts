@@ -71,38 +71,45 @@ export class PiperAgent {
         // Usar path por defecto si no se especifica o es vacío
         const voicePath = modelPath || this.config.modelPath || VOICE_PATH;
         this.config.modelPath = voicePath; // Guardar en config para uso en speak()
-        console.log(`[Piper] Using voice: ${voicePath}`);
+        console.log(`[Audio] Using voice: ${voicePath}`);
         this.isInitialized = true;
-        console.log(`[Piper] Ready for synthesis (sound-play)`);
+        console.log(`[Audio] Ready for synthesis (sound-play)`);
     }
 
     async speak(text: string, priority: 'normal' | 'urgent' = 'normal', speed: number = 1.0): Promise<string> {
-        console.log(`[Piper] Queueing: "${text.substring(0, 50)}..." (${priority}, speed: ${speed})`);
+        const queueTimestamp = Date.now();
+        console.log(`[Audio] 🎯 QUEUED at ${queueTimestamp}: "${text.substring(0, 50)}..." (${priority}, speed: ${speed})`);
 
         if (this._isSpeaking) {
-            console.log(`[Piper] Already speaking, adding to queue (queue size: ${this.speakQueue.length})`);
+            console.log(`[Audio] Already speaking, adding to queue (queue size: ${this.speakQueue.length})`);
             return new Promise((resolve, reject) => {
                 this.speakQueue.push({ text, priority, speed, resolve, reject });
             });
         }
 
-        return this.doSpeak(text, speed);
+        return this.doSpeak(text, speed, queueTimestamp);
     }
 
     /**
      * Perform TTS with sound-play
      */
-    private async doSpeak(text: string, speed: number): Promise<string> {
+    private async doSpeak(text: string, speed: number, queueTimestamp?: number): Promise<string> {
         this._isSpeaking = true;
         const startTime = Date.now();
-        console.log(`[Piper] 🔊 Speaking: "${text.substring(0, 50)}..."`);
+
+        if (queueTimestamp) {
+            const latencyMs = startTime - queueTimestamp;
+            console.log(`[Audio] ⏱️ LATENCY: ${latencyMs}ms from queue to playback start`);
+        }
+
+        console.log(`[Audio] 🔊 Speaking: "${text.substring(0, 50)}..."`);
 
         try {
             // ⚡ PRERENDERED AUDIO - INSTANT PLAYBACK
             const prerenderedPath = this.getPrerenderedPath(text);
 
             if (prerenderedPath) {
-                console.log(`[Piper] ⚡ Using prerendered: ${path.basename(prerenderedPath)}`);
+                console.log(`[Audio] ⚡ Using prerendered: ${path.basename(prerenderedPath)}`);
 
                 // Use ffplay for reliable playback
                 await new Promise<void>((resolve, reject) => {
@@ -129,12 +136,12 @@ export class PiperAgent {
                 });
 
                 const totalTime = Date.now() - startTime;
-                console.log(`[Piper] ✅ ${totalTime}ms (prerendered)`);
+                console.log(`[Audio] ✅ ${totalTime}ms (prerendered)`);
                 return prerenderedPath;
             }
 
             // FALLBACK: Synthesize if not prerendered
-            console.log(`[Piper] ⚠️ Not prerendered, synthesizing...`);
+            console.log(`[Audio] ⚠️ Not prerendered, synthesizing...`);
 
             const lengthScale = 1.0 / speed;
             const pcmChunks: Buffer[] = [];
@@ -144,8 +151,8 @@ export class PiperAgent {
                 '--output_raw',
                 '--length_scale', lengthScale.toFixed(2)
             ];
-            console.log(`[Piper] DEBUG - Path: ${PIPER_BIN_PATH}`);
-            console.log(`[Piper] DEBUG - Model: ${this.config.modelPath}`);
+            console.log(`[Audio] DEBUG - Path: ${PIPER_BIN_PATH}`);
+            console.log(`[Audio] DEBUG - Model: ${this.config.modelPath}`);
 
             // Collect PCM data from Piper
             await new Promise<void>((resolve, reject) => {
@@ -177,7 +184,7 @@ export class PiperAgent {
             const pcmData = Buffer.concat(pcmChunks);
             const synthesisTime = Date.now() - startTime;
             const audioDurationMs = (pcmData.length / (SAMPLE_RATE * 2)) * 1000;
-            console.log(`[Piper] ⚡ Synthesis: ${synthesisTime}ms, audio: ${Math.round(audioDurationMs)}ms`);
+            console.log(`[Audio] ⚡ Synthesis: ${synthesisTime}ms, audio: ${Math.round(audioDurationMs)}ms`);
 
             // Create WAV
             const wavHeader = createWavHeader(pcmData.length);
@@ -189,7 +196,7 @@ export class PiperAgent {
 
             // Play with sound-play (starts immediately, returns before done)
             const playStart = Date.now();
-            console.log(`[Piper] 🔊 Reproduciendo audio: ${tempWav} (${Math.round(audioDurationMs / 1000)}s, vol: ${this.config.volume})`);
+            console.log(`[Audio] 🔊 Reproduciendo audio: ${tempWav} (${Math.round(audioDurationMs / 1000)}s, vol: ${this.config.volume})`);
             soundPlay.play(tempWav, this.config.volume);
 
             // Wait for audio to finish + extra buffer for sound-play Windows quirks
@@ -202,7 +209,7 @@ export class PiperAgent {
             await unlink(tempWav).catch(() => { });
 
             const totalTime = Date.now() - startTime;
-            console.log(`[Piper] ✅ Total: ${totalTime}ms (synthesis: ${synthesisTime}ms, play: ${playTime}ms)`);
+            console.log(`[Audio] ✅ Total: ${totalTime}ms (synthesis: ${synthesisTime}ms, play: ${playTime}ms)`);
 
             return tempWav;
         } finally {
@@ -216,7 +223,7 @@ export class PiperAgent {
         if (this._isSpeaking) return;
 
         const next = this.speakQueue.shift()!;
-        console.log(`[Piper] Processing queue item (${this.speakQueue.length} remaining)`);
+        console.log(`[Audio] Processing queue item (${this.speakQueue.length} remaining)`);
 
         try {
             const result = await this.doSpeak(next.text, next.speed);
@@ -310,16 +317,16 @@ export class PiperAgent {
     }
 
     async interrupt(): Promise<void> {
-        console.log('[Piper] Interrupting speech');
+        console.log('[Audio] Interrupting speech');
     }
 
     setLanguage(language: SupportedLanguage): void {
         this.config.language = language;
-        console.log(`[Piper] Language set to: ${language}`);
+        console.log(`[Audio] Language set to: ${language}`);
     }
 
     async dispose(): Promise<void> {
-        console.log('[Piper] Disposed');
+        console.log('[Audio] Disposed');
     }
 
     isSpeaking(): boolean {

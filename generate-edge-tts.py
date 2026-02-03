@@ -8,7 +8,7 @@ OUTPUT_DIR = "core/ai_engines/piper/prerendered"
 rules = {
     'greeting-1': '¡Dale dale! Te voy a estar mirando y te ayudo a mejorar.',
     'greeting-2': '¡Vamos vamos! Estoy acá con vos, te voy dando consejos.',
-    'greeting-3': '¡Arrancamos! Concentrate en la pista que yo te voy guiando.',
+    'greeting-3': '¡Arrancamos! Mandale mecha a la pista que yo te voy guiando.',
     'greeting-4': '¡Dale que podés! Vamos por ese tiempazo, estoy con vos.',
     'coach-connected': 'Entrenador virtual conectado',
     'throttle-punch': 'Entrada de potencia muy brusca, aplicá el acelerador más gradual',
