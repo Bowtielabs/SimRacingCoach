@@ -17,6 +17,12 @@ const DEBUG = {
 import type { TelemetryFrame } from '@simracing/core';
 import { PiperAgent } from './piper-agent.js';
 import { TelemetryRulesEngine } from './telemetry-rules-engine.js';
+import { spawn } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import type {
     AIServiceConfig,
     SessionContext,
@@ -67,6 +73,15 @@ export class AICoachingService {
     private hasGivenInitialGreeting: boolean = false;
     private initialized: boolean = false;
     private externalAgents: boolean = false;
+
+    // New tracking for UI
+    private lastRecommendation: {
+        ruleId: string;
+        advice: string;
+        category: string;
+        priority: number;
+        timestamp: number;
+    } | null = null;
 
     constructor(config: Partial<AIServiceConfig> = {}, externalTts?: PiperAgent) {
         this.config = { ...DEFAULT_CONFIG, ...config };
@@ -177,10 +192,10 @@ export class AICoachingService {
 
             // Mensajes motivadores aleatorios
             const greetings = [
-                "¡Dale dale! Te voy a estar mirando y te ayudo a mejorar.",
-                "¡Vamos vamos! Estoy acá con vos, te voy dando consejos.",
-                "¡Arrancamos! Concentrate en la pista que yo te voy guiando.",
-                "¡Dale que podés! Vamos por ese tiempazo, estoy con vos."
+                "greeting-1",
+                "greeting-2",
+                "greeting-3",
+                "greeting-4"
             ];
 
             const greeting = greetings[Math.floor(Math.random() * greetings.length)];
@@ -336,28 +351,12 @@ export class AICoachingService {
             console.log(`   ThrottleChanges: ${analysis.patterns.throttleChanges}`);
             console.log(`   AvgSpeed: ${Math.round(analysis.averages.speed)} kph`);
 
-            // DEBUG: Ver qué datos de temperaturas y RPM están llegando
             console.log(`\n🔍 DEBUG - Datos del frame actual:`);
             console.log(`   RPM: ${lastFrame?.powertrain?.rpm || 'N/A'}`);
             console.log(`   Water temp: ${lastFrame?.temps?.waterC || 'N/A'}°C`);
             console.log(`   Oil temp: ${lastFrame?.temps?.oilC || 'N/A'}°C`);
             console.log(`   Tyre temps: ${lastFrame?.temps?.tyreC?.join(', ') || 'N/A'}`);
             console.log(`   Brake temps: ${lastFrame?.temps?.brakeC?.join(', ') || 'N/A'}`);
-
-            // DEBUG: Guardar buffer completo en archivo para análisis
-            const fs = await import('fs');
-            const path = await import('path');
-            const timestamp = new Date().toISOString().replace(/:/g, '-');
-            const bufferFile = path.join(process.cwd(), `buffer-${timestamp}.json`);
-            const bufferData = {
-                timestamp: new Date().toISOString(),
-                frameCount: this.frameBuffer.length,
-                analysis,
-                frames: this.frameBuffer,
-                lastFrame
-            };
-            fs.writeFileSync(bufferFile, JSON.stringify(bufferData, null, 2));
-            console.log(`\n💾 Buffer guardado en: ${bufferFile}`);
 
             // Get ALL matching rules from rules engine (sorted by priority)
             const allRules = this.rulesEngine.analyzeAll(analysis, 50); // Pedir hasta 50 reglas (devuelve TODAS)
@@ -381,7 +380,8 @@ export class AICoachingService {
                 console.log(`\n🔊 HABLANDO ${topRules.length} consejos (de ${allRules.length} total):`);
                 for (const rule of topRules) {
                     console.log(`   -> "${rule.advice}" (${rule.ruleId})`);
-                    await this.tts.speak(rule.advice, 'normal');
+                    // ⚡ Using PiperAgent with prerendered WAV (NO TTS synthesis)
+                    await this.tts.speak(rule.ruleId, 'normal');
                 }
                 console.log('[AIService] ✓ Consejos reproducidos');
             } else {
@@ -400,13 +400,15 @@ export class AICoachingService {
         }
     }
 
+
+
     private async giveInitialGreeting(): Promise<void> {
         try {
             const greetings = [
-                "¡Dale dale! Te voy a estar mirando y te ayudo a mejorar.",
-                "¡Vamos vamos! Estoy acá con vos, te voy dando consejos.",
-                "¡Arrancamos! Concentrate en la pista que yo te voy guiando.",
-                "¡Dale que podés! Vamos por ese tiempazo, estoy con vos."
+                "greeting-1",
+                "greeting-2",
+                "greeting-3",
+                "greeting-4"
             ];
 
             const greeting = greetings[Math.floor(Math.random() * greetings.length)];
@@ -427,12 +429,30 @@ export class AICoachingService {
     }
 
     getStatus() {
+        const targetFrames = 600; // 30s * 20fps
+        const currentFrames = this.frameBuffer.length;
+        const elapsed = Date.now() - this.bufferStartTime;
+        const secondsToAnalysis = Math.max(0, (30000 - elapsed) / 1000);
+
         return {
             initialized: this.initialized,
             sessionActive: this.sessionContext !== null,
-            bufferSize: this.frameBuffer.length,
-            mode: 'ai',
-            language: this.config.language
+            mode: 'ai' as const,
+            language: this.config.language,
+
+            audio: {
+                isSpeaking: this.tts.isSpeaking(),
+                queue: this.tts.getQueueLength()
+            },
+
+            buffer: {
+                size: currentFrames,
+                target: targetFrames,
+                progress: Math.min(100, Math.round((currentFrames / targetFrames) * 100)),
+                secondsToAnalysis: Math.round(secondsToAnalysis)
+            },
+
+            lastRecommendation: this.lastRecommendation
         };
     }
 

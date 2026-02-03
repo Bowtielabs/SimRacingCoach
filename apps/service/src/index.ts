@@ -216,7 +216,7 @@ function handleAdapterStatus(message: AdapterStatusMessage) {
     // console.log('[Service] piperAgent exists:', !!piperAgent);
     if (piperAgent) {
       // console.log('[Service] Calling piperAgent.speak...');
-      piperAgent.speak('Entrenador virtual conectado', 'normal')
+      piperAgent.speak('coach-connected', 'normal')
         .then(() => { }) // console.log('[Service] ✓ Connection announcement complete'))
         .catch((err: any) => { }); // console.error('[Service] Failed to speak connection message:', err));
     }
@@ -425,15 +425,24 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const params = body ? JSON.parse(body) : {};
-        const testText = params.text || "Hola!! te voy a ayudar para que puedas mejorar y te conviertas en el mejor piloto de Simuladores.";
 
-        logger.info({ testText }, 'Voice test - direct to Piper');
+        // Random driving advice ruleIds (not greetings)
+        const drivingRuleIds = [
+          'throttle-punch', 'pedal-fidgeting', 'brake-riding', 'soft-braking',
+          'brake-stomp', 'lazy-throttle', 'coasting-too-much', 'throttle-overlap',
+          'unfinished-braking', 'brake-inconsistency', 'redline-hanging',
+          'early-short-shift', 'engine-braking-risk', 'neutral-driving',
+          'slow-shifts', 'wrong-gear-slow-corner', 'no-rev-match'
+        ];
+        const testRuleId = drivingRuleIds[Math.floor(Math.random() * drivingRuleIds.length)];
+
+        logger.info({ testRuleId }, 'Voice test - playing prerendered WAV');
 
         if (!piperAgent) {
           throw new Error('Piper not ready');
         }
 
-        await piperAgent.speak(testText, 'normal', (config.voice.rate / 10) + 1.0);
+        await piperAgent.speak(testRuleId, 'normal', (config.voice.rate / 10) + 1.0);
 
         res.writeHead(200);
         res.end(JSON.stringify({ success: true }));
@@ -523,7 +532,7 @@ process.on('SIGINT', async () => {
     // console.log('[Service] Starting Piper...');
     piperAgent = new PiperAgent();
     await piperAgent.initialize();
-    console.log('[Service] ✅ Piper ready - Sistema iniciado');
+    console.log('[Service] ✅ Piper ready (with prerendered audio) - Sistema iniciado');
 
     // Check if adapter is already connected and initialize AI if needed
     if (adapterStatus?.state === 'connected' && !aiService) {

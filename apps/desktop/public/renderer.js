@@ -14,9 +14,6 @@ let isRunning = false;
 const elements = {
   simulatorSelect: document.getElementById('simulator-select'),
   languageSelect: document.getElementById('language-select'),
-
-  speedSlider: document.getElementById('speed-slider'),
-  speedValue: document.getElementById('speed-value'),
   testVoiceBtn: document.getElementById('test-voice-btn'),
   runBtn: document.getElementById('run-btn'),
   stopBtn: document.getElementById('stop-btn'),
@@ -164,17 +161,7 @@ elements.languageSelect.addEventListener('change', async () => {
   await applyLanguage(newLang);
 });
 
-// Speed slider
-elements.speedSlider.addEventListener('input', () => {
-  const speed = Number(elements.speedSlider.value);
-  elements.speedValue.textContent = speed.toFixed(1) + 'x';
-
-  // Convert speed multiplier (0.5-2.0) back to rate (-10 to +10)
-  const rate = Math.round((speed - 1.0) * 10);
-  window.api.updateConfig({
-    voice: { rate: rate }
-  });
-});
+// Speed slider removed - using fixed speed
 
 // Test Voice button
 elements.testVoiceBtn.addEventListener('click', async () => {
@@ -187,8 +174,7 @@ elements.testVoiceBtn.addEventListener('click', async () => {
     const testMessage = t?.voice?.testMessage || 'Test message';
 
     await window.api.testVoice(testMessage, {
-      voice: 'ai-tts', // Use AI TTS instead of Windows
-      rate: Number(elements.speedSlider.value)
+      voice: 'ai-tts' // Use AI TTS instead of Windows
     });
 
     elements.testVoiceBtn.querySelector('span').textContent = '✅';
@@ -215,6 +201,7 @@ elements.runBtn.addEventListener('click', async () => {
     elements.runBtn.classList.add('hidden');
     elements.stopBtn.classList.remove('hidden');
     updateStatus({ state: 'running', sim: elements.simulatorSelect.value });
+    startStatusPolling();
   } catch (err) {
     console.error('Failed to start:', err);
   }
@@ -229,29 +216,97 @@ elements.stopBtn.addEventListener('click', async () => {
     elements.stopBtn.classList.add('hidden');
     elements.runBtn.classList.remove('hidden');
     updateStatus({ state: 'disconnected' });
+    stopStatusPolling();
+    document.getElementById('coach-state').textContent = 'Inactivo';
+    document.getElementById('buffer-progress').style.width = '0%';
+    document.getElementById('buffer-text').textContent = '0/600';
+    document.getElementById('last-recommendation').style.display = 'none';
+    document.getElementById('speaking-indicator').style.display = 'none';
   } catch (err) {
     console.error('Failed to stop:', err);
   }
 });
 
-// Status polling (every 2 seconds)
-setInterval(async () => {
-  try {
-    const status = await window.api.getStatus();
-    console.log('[Status Poll]', status); // DEBUG
-    updateStatus(status);
+// Status polling (every 1.5 seconds when active)
+let statusPollInterval = null;
 
-    // Update button states based on status
-    if (status.state === 'disconnected' && isRunning) {
-      console.log('[Status Poll] Resetting to disconnected'); // DEBUG
-      isRunning = false;
-      elements.stopBtn.classList.add('hidden');
-      elements.runBtn.classList.remove('hidden');
+function startStatusPolling() {
+  if (statusPollInterval) return;
+
+  statusPollInterval = setInterval(async () => {
+    try {
+      const status = await window.api.getStatus();
+      console.log('[Status Poll]', status);
+      updateStatus(status);
+      updateCoachPanel(status);
+      updateSpeakingIndicator(status);
+
+      if (status.state === 'disconnected' && isRunning) {
+        console.log('[Status Poll] Resetting to disconnected');
+        isRunning = false;
+        elements.stopBtn.classList.add('hidden');
+        elements.runBtn.classList.remove('hidden');
+        stopStatusPolling();
+      }
+    } catch (err) {
+      console.error('[Status Poll] Error:', err);
     }
-  } catch (err) {
-    console.error('[Status Poll] Error:', err); // DEBUG
+  }, 1500);
+}
+
+function stopStatusPolling() {
+  if (statusPollInterval) {
+    clearInterval(statusPollInterval);
+    statusPollInterval = null;
   }
-}, 2000);
+}
+
+function updateCoachPanel(status) {
+  const coachState = document.getElementById('coach-state');
+  const bufferProgress = document.getElementById('buffer-progress');
+  const bufferText = document.getElementById('buffer-text');
+  const lastRecPanel = document.getElementById('last-recommendation');
+  const recIcon = document.getElementById('rec-icon');
+  const recText = document.getElementById('rec-text');
+  const recTime = document.getElementById('rec-time');
+
+  if (status.sessionActive) {
+    coachState.textContent = status.buffer?.progress < 100 ? 'Acumulando datos...' : 'Analizando telemetría';
+    coachState.style.color = '#4ade80';
+  } else {
+    coachState.textContent = 'Inactivo';
+    coachState.style.color = '#94a3b8';
+  }
+
+  if (status.buffer) {
+    const progress = status.buffer.progress || 0;
+    bufferProgress.style.width = `${progress}%`;
+    bufferText.textContent = `${status.buffer.size}/${status.buffer.target}`;
+    if (status.buffer.secondsToAnalysis > 0) {
+      bufferText.textContent += ` (${status.buffer.secondsToAnalysis}s)`;
+    }
+  } else {
+    bufferProgress.style.width = '0%';
+    bufferText.textContent = '0/600';
+  }
+
+  if (status.lastRecommendation) {
+    const rec = status.lastRecommendation;
+    lastRecPanel.style.display = 'flex';
+    const categoryIcons = { technique: '🎯', engine: '⚙️', brakes: '🔴', tyres: '🛞', strategy: '🧠', track: '🏁' };
+    recIcon.textContent = categoryIcons[rec.category] || '💬';
+    recText.textContent = rec.advice;
+    const secondsAgo = Math.floor((Date.now() - rec.timestamp) / 1000);
+    recTime.textContent = secondsAgo < 60 ? `Hace ${secondsAgo}s` : `Hace ${Math.floor(secondsAgo / 60)}m`;
+  } else {
+    lastRecPanel.style.display = 'none';
+  }
+}
+
+function updateSpeakingIndicator(status) {
+  const speakingIndicator = document.getElementById('speaking-indicator');
+  speakingIndicator.style.display = status.audio?.isSpeaking ? 'flex' : 'none';
+}
 
 // Initialize
 loadTranslations().then(() => {

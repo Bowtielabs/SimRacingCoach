@@ -19,7 +19,7 @@ const PIPER_BIN_PATH = path.join(__dirname, '../../../core/ai_engines/piper/pipe
 const VOICE_PATH = path.join(__dirname, '../../../core/ai_engines/piper/es_AR-daniela.onnx');
 
 // Audio config for Daniela voice
-const SAMPLE_RATE = 22050;
+const SAMPLE_RATE = 44100;
 
 const DEFAULT_CONFIG: TTSConfig = {
     modelPath: VOICE_PATH,
@@ -103,10 +103,30 @@ export class PiperAgent {
 
             if (prerenderedPath) {
                 console.log(`[Piper] ⚡ Using prerendered: ${path.basename(prerenderedPath)}`);
-                soundPlay.play(prerenderedPath, this.config.volume);
 
-                // Conservative wait time for all prerendered messages (~2.5s max duration + buffer)
-                await new Promise(resolve => setTimeout(resolve, 3000));
+                // Use ffplay for reliable playback
+                await new Promise<void>((resolve, reject) => {
+                    const ffplay = spawn('ffplay', [
+                        '-nodisp',
+                        '-autoexit',
+                        '-loglevel', 'quiet',
+                        prerenderedPath
+                    ], {
+                        windowsHide: true
+                    });
+
+                    ffplay.on('close', (code) => {
+                        if (code !== 0 && code !== null) {
+                            reject(new Error(`ffplay failed with code ${code}`));
+                        } else {
+                            resolve();
+                        }
+                    });
+
+                    ffplay.on('error', (err) => {
+                        reject(err);
+                    });
+                });
 
                 const totalTime = Date.now() - startTime;
                 console.log(`[Piper] ✅ ${totalTime}ms (prerendered)`);
@@ -212,6 +232,45 @@ export class PiperAgent {
     private getPrerenderedPath(text: string): string | null {
         // Map exact text to prerendered filename (rule ID)
         const MESSAGE_TO_FILE: Record<string, string> = {
+            // Greetings
+            'greeting-1': 'greeting-1',
+            'greeting-2': 'greeting-2',
+            'greeting-3': 'greeting-3',
+            'greeting-4': 'greeting-4',
+            // Coach connected
+            'coach-connected': 'coach-connected',
+            // RuleId mappings (direct)
+            'throttle-punch': 'throttle-punch',
+            'pedal-fidgeting': 'pedal-fidgeting',
+            'brake-riding': 'brake-riding',
+            'soft-braking': 'soft-braking',
+            'brake-stomp': 'brake-stomp',
+            'lazy-throttle': 'lazy-throttle',
+            'coasting-too-much': 'coasting-too-much',
+            'throttle-overlap': 'throttle-overlap',
+            'unfinished-braking': 'unfinished-braking',
+            'brake-inconsistency': 'brake-inconsistency',
+            'redline-hanging': 'redline-hanging',
+            'early-short-shift': 'early-short-shift',
+            'engine-braking-risk': 'engine-braking-risk',
+            'neutral-driving': 'neutral-driving',
+            'slow-shifts': 'slow-shifts',
+            'wrong-gear-slow-corner': 'wrong-gear-slow-corner',
+            'no-rev-match': 'no-rev-match',
+            'engine-warnings-detected': 'engine-warnings-detected',
+            'tyres-too-cold': 'tyres-too-cold',
+            'tyres-overheating': 'tyres-overheating',
+            'thermal-imbalance-lr': 'thermal-imbalance-lr',
+            'thermal-imbalance-fb': 'thermal-imbalance-fb',
+            'brake-fade': 'brake-fade',
+            'cold-engine-stress': 'cold-engine-stress',
+            'water-overheating': 'water-overheating',
+            'top-speed-inconsistency': 'top-speed-inconsistency',
+            'erratic-speed-variation': 'erratic-speed-variation',
+            'inefficient-fuel-consumption': 'inefficient-fuel-consumption',
+            'fuel-critical-low': 'fuel-critical-low',
+            'stalling-risk': 'stalling-risk',
+            // Spanish text mappings (for backwards compatibility)
             'Entrada de potencia muy brusca, aplicá el acelerador más gradual': 'throttle-punch',
             'Demasiado movimiento en los pedales, suavizá las transiciones': 'pedal-fidgeting',
             'Estás pisando freno y acelerador al mismo tiempo, es ineficiente': 'brake-riding',
