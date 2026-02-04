@@ -81,11 +81,16 @@ async function getStatus() {
             return { state: 'disconnected' };
         }
         const data = await res.json();
+        console.log('[Main] Backend status data:', data);
+        console.log('[Main] data.ai exists?', !!data.ai);
+        console.log('[Main] Recommendations count:', data.ai?.recommendations?.length || 0);
         return {
             state: data.state || 'disconnected',
             sim: data.sim || 'unknown',
             details: data.details,
-            buffer: data.buffer // Pass through buffer data if available
+            buffer: data.buffer,
+            ai: data.ai, // Pass ai object with recommendations
+            audio: data.audio
         };
     }
     catch (err) {

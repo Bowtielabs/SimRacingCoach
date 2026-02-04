@@ -83,6 +83,16 @@ export class AICoachingService {
         timestamp: number;
     } | null = null;
 
+    // Recommendation history for feed (last 20)
+    private recommendationHistory: Array<{
+        id: string;
+        ruleId: string;
+        advice: string;
+        category: string;
+        priority: number;
+        timestamp: number;
+    }> = [];
+
     constructor(config: Partial<AIServiceConfig> = {}, externalTts?: PiperAgent) {
         this.config = { ...DEFAULT_CONFIG, ...config };
 
@@ -320,6 +330,23 @@ export class AICoachingService {
                 console.log(`\n🔊 HABLANDO ${topRules.length} consejos (de ${allRules.length} total):`);
                 for (const rule of topRules) {
                     console.log(`   -> "${rule.advice}" (${rule.ruleId})`);
+
+                    // Track recommendation for UI feed
+                    const recId = `${rule.ruleId}-${Date.now()}`;
+                    this.recommendationHistory.unshift({
+                        id: recId,
+                        ruleId: rule.ruleId,
+                        advice: rule.advice,
+                        category: rule.category,
+                        priority: rule.priority,
+                        timestamp: Date.now()
+                    });
+
+                    // Keep only last 20 recommendations
+                    if (this.recommendationHistory.length > 20) {
+                        this.recommendationHistory.pop();
+                    }
+
                     // ⚡ Using PiperAgent with prerendered WAV (NO TTS synthesis)
                     await this.tts.speak(rule.ruleId, 'normal');
                 }
@@ -392,7 +419,9 @@ export class AICoachingService {
                 secondsToAnalysis: Math.round(secondsToAnalysis)
             },
 
-            lastRecommendation: this.lastRecommendation
+            lastRecommendation: this.lastRecommendation,
+
+            recommendations: this.recommendationHistory
         };
     }
 

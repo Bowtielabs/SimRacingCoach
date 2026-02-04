@@ -19,6 +19,10 @@ const elements = {
   audioWaves: document.getElementById('audio-waves'),
   simName: document.getElementById('sim-name'),
 
+  // Main content - Recommendations Feed
+  feedCount: document.getElementById('feed-count'),
+  recList: document.getElementById('recommendations-list'),
+
   // Main content - Last Recommendation
   lastRecPanel: document.getElementById('last-recommendation'),
   recIcon: document.getElementById('rec-icon'),
@@ -215,14 +219,50 @@ function setupEventListeners() {
   });
 }
 
+// Translation state
+let translations = {};
+
+// Recommendation Icon Mapping
+const RECOMMENDATION_ICONS = {
+  'fuel': '⛽',
+  'tyre': '🏎️',
+  'brake': '🛑',
+  'flag': '🚩',
+  'temp': '🌡️',
+  'technique': '🎯',
+  'rev-match': '⚙️',
+  'default': '💡'
+};
+
+function getIconForRecommendation(ruleId) {
+  if (ruleId.includes('fuel')) return RECOMMENDATION_ICONS.fuel;
+  if (ruleId.includes('tyre')) return RECOMMENDATION_ICONS.tyre;
+  if (ruleId.includes('brake')) return RECOMMENDATION_ICONS.brake;
+  if (ruleId.includes('flag')) return RECOMMENDATION_ICONS.flag;
+  if (ruleId.includes('temp') || ruleId.includes('overheat')) return RECOMMENDATION_ICONS.temp;
+  if (ruleId.includes('rev-match')) return RECOMMENDATION_ICONS['rev-match'];
+  return RECOMMENDATION_ICONS.default;
+}
+
+function getRelativeTime(timestamp) {
+  const now = Date.now();
+  const diff = now - timestamp;
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+
+  if (seconds < 10) return 'Ahora';
+  if (seconds < 60) return `hace ${seconds} seg`;
+  if (minutes < 60) return `hace ${minutes} min`;
+  if (hours < 24) return `hace ${hours} h`;
+  return `hace ${Math.floor(hours / 24)} días`;
+}
+
 // ========== LANGUAGE ==========
 
 // Load translation files
-let translations = {
-  es: null,
-  en: null,
-  pt: null
-};
+// The original `translations` variable was defined here, but it's now moved above with other state.
+// The `currentLanguage` variable was also defined here, but it's now moved above with other state.
 
 async function loadTranslations() {
   const languages = ['es', 'en', 'pt'];
@@ -347,6 +387,9 @@ function updateStatus(status) {
 }
 
 function updateCoachPanel(status) {
+  console.log('[CoachPanel] status.ai:', status.ai);
+  console.log('[CoachPanel] status.ai?.recommendations:', status.ai?.recommendations);
+
   // Show/hide audio waves when speaking
   if (status.audio?.isSpeaking) {
     elements.audioWaves.style.display = 'flex';
@@ -354,45 +397,68 @@ function updateCoachPanel(status) {
     elements.audioWaves.style.display = 'none';
   }
 
-  // Update buffer progress
-  if (status.buffer) {
-    const progress = status.buffer.progress || 0;
-    const size = status.buffer.size || 0;
-    elements.bufferProgress.style.width = `${progress}%`;
-    elements.bufferText.textContent = `${size}/300 frames`;
+  // Update recommendations feed (check both locations)
+  const recommendations = status.ai?.recommendations || status.recommendations;
+  if (recommendations && recommendations.length > 0) {
+    updateRecommendationsFeed(recommendations);
   } else {
-    elements.bufferProgress.style.width = '0%';
-    elements.bufferText.textContent = '0/300 frames';
+    console.log('[CoachPanel] No recommendations found');
+  }
+}
+
+function updateRecommendationsFeed(recommendations) {
+  console.log('[Feed] updateRecommendationsFeed called with:', recommendations);
+
+  if (!recommendations || recommendations.length === 0) {
+    console.log('[Feed] No recommendations, showing empty state');
+    elements.feedCount.textContent = '0';
+    elements.recList.innerHTML = `
+      <div class="feed-empty">
+        <span class="empty-icon">💬</span>
+        <p>Aún no hay recomendaciones</p>
+      </div>
+    `;
+    return;
   }
 
-  // Update last recommendation
-  if (status.ai?.lastRecommendation) {
-    const rec = status.ai.lastRecommendation;
-    elements.lastRecPanel.style.display = 'flex';
+  console.log('[Feed] Displaying', recommendations.length, 'recommendations');
 
-    // Category icons
-    const categoryIcons = {
-      technique: '🎯',
-      engine: '⚙️',
-      brakes: '🔴',
-      tyres: '🛞',
-      strategy: '🧠',
-      track: '🏁'
-    };
+  // Update count
+  elements.feedCount.textContent = recommendations.length;
 
-    elements.recIcon.textContent = categoryIcons[rec.category] || '💬';
-    elements.recText.textContent = rec.advice;
+  // Clear and rebuild list
+  elements.recList.innerHTML = '';
 
-    // Timestamp
-    const secondsAgo = Math.floor((Date.now() - rec.timestamp) / 1000);
-    if (secondsAgo < 60) {
-      elements.recTime.textContent = `Hace ${secondsAgo}s`;
-    } else {
-      elements.recTime.textContent = `Hace ${Math.floor(secondsAgo / 60)}m`;
-    }
-  } else {
-    elements.lastRecPanel.style.display = 'none';
-  }
+  // Add each recommendation (newest first)
+  recommendations.forEach(rec => {
+    const item = document.createElement('div');
+    item.className = 'recommendation-item';
+    item.dataset.id = rec.id;
+
+    const icon = getIconForRecommendation(rec.ruleId);
+    const timestamp = getRelativeTime(rec.timestamp);
+    const priorityClass = rec.priority >= 8 ? 'high' : rec.priority >= 5 ? 'medium' : 'low';
+
+    item.innerHTML = `
+      <div class="rec-icon-container">
+        ${icon}
+      </div>
+      <div class="rec-details">
+        <p class="rec-message">${rec.advice}</p>
+        <div class="rec-meta">
+          <span class="rec-timestamp">${timestamp}</span>
+          <span class="rec-priority ${priorityClass}">P${rec.priority}</span>
+        </div>
+      </div>
+    `;
+
+    elements.recList.appendChild(item);
+  });
+
+  console.log('[Feed] Feed updated, items in DOM:', elements.recList.children.length);
+
+  // Auto-scroll to top to see newest
+  elements.recList.scrollTop = 0;
 }
 
 // ========== STATUS POLLING ==========
@@ -424,29 +490,6 @@ function startStatusPolling() {
   }, 1500);
 }
 
-// ========== STATUS POLLING ==========
-
-let statusPollingInterval = null;
-
-function startStatusPolling() {
-  console.log('[Renderer] Starting status polling');
-
-  // Clear any existing interval
-  if (statusPollingInterval) {
-    clearInterval(statusPollingInterval);
-  }
-
-  // Poll every 1 second
-  statusPollingInterval = setInterval(async () => {
-    try {
-      const status = await window.api.getStatus();
-      updateStatus(status);
-    } catch (err) {
-      console.error('[Renderer] Status poll error:', err);
-    }
-  }, 1000);
-}
-
 function stopStatusPolling() {
   if (statusPollInterval) {
     console.log('[Renderer] Stopping status polling');
@@ -454,6 +497,7 @@ function stopStatusPolling() {
     statusPollInterval = null;
   }
 }
+
 
 // ========== EXPORTS ==========
 

@@ -564,4 +564,178 @@ body {
   .main-content {
     padding: 24px;
   }
+}/* === Recommendations Feed Card === */
+.recommendations-feed-card {
+    margin-bottom: 20px;
+}
+
+.feed-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.feed-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.feed-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 8px;
+    background: var(--gradient-purple);
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    color: white;
+}
+
+.recommendations-list {
+    max-height: 320px;
+    /* ~4 items visible */
+    overflow-y: auto;
+    scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+.recommendations-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.recommendations-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.recommendations-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+.recommendations-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.feed-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    color: var(--text-tertiary);
+    text-align: center;
+}
+
+.empty-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.3;
+}
+
+.feed-empty p {
+    font-size: 14px;
+    opacity: 0.6;
+}
+
+/* Recommendation Item */
+.recommendation-item {
+    display: flex;
+    gap: 12px;
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: all 0.2s ease;
+    animation: slideInFade 0.3s ease;
+}
+
+@keyframes slideInFade {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.recommendation-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.recommendation-item:last-child {
+    border-bottom: none;
+}
+
+.rec-icon-container {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-glass);
+}
+
+.rec-details {
+    flex: 1;
+    min-width: 0;
+    /* Allow text truncation */
+}
+
+.rec-message {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+    word-wrap: break-word;
+}
+
+.rec-meta {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--text-tertiary);
+}
+
+.rec-timestamp {
+    opacity: 0.7;
+}
+
+.rec-priority {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.rec-priority.high {
+    background: rgba(255, 107, 157, 0.15);
+    color: #ff6b9d;
+}
+
+.rec-priority.medium {
+    background: rgba(250, 168, 26, 0.15);
+    color: #faa81a;
+}
+
+.rec-priority.low {
+    background: rgba(102, 126, 234, 0.15);
+    color: #667eea;
 }
