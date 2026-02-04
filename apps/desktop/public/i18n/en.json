@@ -8,8 +8,11 @@
         "volume": "Volume",
         "speed": "Speed",
         "testVoice": "Test Voice",
-        "run": "START COACHING",
-        "stop": "STOP"
+        "run": "Start Coaching",
+        "stop": "Stop Coaching",
+        "connecting": "Connecting...",
+        "stopping": "Stopping...",
+        "testingVoice": "Playing..."
     },
     "simulators": {
         "iracing": "iRacing",

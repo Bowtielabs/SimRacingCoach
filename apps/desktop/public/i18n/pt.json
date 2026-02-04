@@ -9,7 +9,10 @@
         "speed": "Velocidade",
         "testVoice": "Testar Voz",
         "run": "INICIAR TREINAMENTO",
-        "stop": "PARAR"
+        "stop": "PARAR TREINAMENTO",
+        "connecting": "Conectando...",
+        "stopping": "Parando...",
+        "testingVoice": "Reproduzindo..."
     },
     "simulators": {
         "iracing": "iRacing",

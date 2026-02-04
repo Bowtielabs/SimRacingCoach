@@ -94,7 +94,8 @@ async function getStatus() {
     return {
       state: data.state || 'disconnected',
       sim: data.sim || 'unknown',
-      details: data.details
+      details: data.details,
+      buffer: data.buffer // Pass through buffer data if available
     };
   } catch (err) {
     console.error('[Main] getStatus failed:', err);

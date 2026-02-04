@@ -1,30 +1,231 @@
-// i18n translations import
-let translations = {
-  es: null,
-  en: null,
-  pt: null,
-  fr: null,
-  it: null
-};
+// ==========================================
+// SIMRACING COACH - UNIFIED SCREEN RENDERER
+// ==========================================
 
 let currentLanguage = 'es';
 let isRunning = false;
 
-// DOM elements
+// DOM Elements
 const elements = {
+  // Sidebar controls
   simulatorSelect: document.getElementById('simulator-select'),
   languageSelect: document.getElementById('language-select'),
   testVoiceBtn: document.getElementById('test-voice-btn'),
-  runBtn: document.getElementById('run-btn'),
+  startBtn: document.getElementById('start-btn'),
   stopBtn: document.getElementById('stop-btn'),
-  statusIndicator: document.getElementById('status-indicator'),
-  statusText: document.getElementById('status-text'),
-  speakingIndicator: document.getElementById('speaking-indicator')
+
+  // Main content - Status Bar
+  coachState: document.getElementById('coach-state'),
+  audioWaves: document.getElementById('audio-waves'),
+  simName: document.getElementById('sim-name'),
+
+  // Main content - Last Recommendation
+  lastRecPanel: document.getElementById('last-recommendation'),
+  recIcon: document.getElementById('rec-icon'),
+  recText: document.getElementById('rec-text'),
+  recTime: document.getElementById('rec-time'),
+
+  // Control buttons
+  focusBtn: document.getElementById('focus-btn'),
+  muteBtn: document.getElementById('mute-btn')
 };
 
+// ========== INITIALIZATION ==========
+
+window.addEventListener('DOMContentLoaded', async () => {
+  console.log('[Renderer] Unified screen initialized');
+
+  // Load translations first
+  await loadTranslations();
+
+  // Setup event listeners
+  setupEventListeners();
+
+  // Initial status update
+  updateStatus({ state: 'disconnected' });
+});
+
+// ========== EVENT LISTENERS ==========
+
+function setupEventListeners() {
+  console.log('[Renderer] Setting up event listeners');
+  console.log('[Renderer] Start button element:', elements.startBtn);
+  console.log('[Renderer] Stop button element:', elements.stopBtn);
+
+  // Language change
+  elements.languageSelect.addEventListener('change', async () => {
+    const newLang = elements.languageSelect.value;
+    await applyLanguage(newLang);
+  });
+
+  // Test Voice
+  elements.testVoiceBtn.addEventListener('click', async () => {
+    console.log('[Renderer] Test voice clicked');
+
+    // Set speaking state
+    elements.testVoiceBtn.classList.add('speaking');
+    const originalHTML = elements.testVoiceBtn.innerHTML;
+    elements.testVoiceBtn.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <rect x="4" y="8" width="3" height="8" rx="1.5">
+          <animate attributeName="height" values="8;16;8" dur="0.8s" repeatCount="indefinite"/>
+          <animate attributeName="y" values="8;4;8" dur="0.8s" repeatCount="indefinite"/>
+        </rect>
+        <rect x="10" y="8" width="3" height="8" rx="1.5">
+          <animate attributeName="height" values="8;16;8" dur="0.8s" begin="0.15s" repeatCount="indefinite"/>
+          <animate attributeName="y" values="8;4;8" dur="0.8s" begin="0.15s" repeatCount="indefinite"/>
+        </rect>
+        <rect x="16" y="8" width="3" height="8" rx="1.5">
+          <animate attributeName="height" values="8;16;8" dur="0.8s" begin="0.3s" repeatCount="indefinite"/>
+          <animate attributeName="y" values="8;4;8" dur="0.8s" begin="0.3s" repeatCount="indefinite"/>
+        </rect>
+      </svg>
+      Reproduciendo...
+    `;
+
+    try {
+      await window.api.testVoice({
+        text: getTestVoiceText(),
+        language: currentLanguage
+      });
+
+      // Wait a bit to show completion
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+    } catch (err) {
+      console.error('[Renderer] Test voice error:', err);
+    } finally {
+      // Restore original state
+      elements.testVoiceBtn.classList.remove('speaking');
+      elements.testVoiceBtn.innerHTML = originalHTML;
+    }
+  });
+
+  console.log('[Renderer] About to register START button listener');
+
+  // Start Coaching
+  elements.startBtn.addEventListener('click', async () => {
+    console.log('[Renderer] START COACHING clicked, isRunning:', isRunning);
+
+    // Prevent multiple clicks
+    if (isRunning) {
+      console.log('[Renderer] Already running, ignoring click');
+      return;
+    }
+
+    try {
+      const sim = elements.simulatorSelect.value;
+
+      // Immediately switch to STOP button (allows cancellation during waiting)
+      isRunning = true;
+      elements.startBtn.classList.add('hidden');
+      elements.stopBtn.classList.remove('hidden');
+
+      // Update config and start service
+      await window.api.updateConfig({
+        adapter: { id: sim },
+        language: currentLanguage
+      });
+
+      await window.api.startService({
+        adapterId: sim,
+        language: currentLanguage
+      });
+
+      console.log('[Renderer] Service started successfully');
+      startStatusPolling();
+
+    } catch (err) {
+      console.error('[Renderer] Start error:', err);
+      // Restore start button on error
+      isRunning = false;
+      elements.stopBtn.classList.add('hidden');
+      elements.startBtn.classList.remove('hidden');
+    }
+  });
+
+  console.log('[Renderer] START button listener registered');
+
+  // Stop Coaching
+  elements.stopBtn.addEventListener('click', async () => {
+    console.log('[Renderer] STOP COACHING clicked');
+
+    try {
+      // Disable button while stopping
+      elements.stopBtn.disabled = true;
+
+      await window.api.stopService();
+
+      // Only switch buttons AFTER service responds
+      isRunning = false;
+      elements.stopBtn.classList.add('hidden');
+      elements.startBtn.classList.remove('hidden');
+
+      updateStatus({ state: 'disconnected' });
+      stopStatusPolling();
+
+    } catch (err) {
+      console.error('[Renderer] Stop error:', err);
+    } finally {
+      // ALWAYS re-enable button
+      elements.stopBtn.disabled = false;
+    }
+  });
+
+  // Focus Mode Toggle
+  elements.focusBtn.addEventListener('click', async () => {
+    const isActive = elements.focusBtn.classList.contains('active');
+
+    try {
+      if (isActive) {
+        // Deactivate focus
+        await window.api.focus(); // This toggles focus in backend
+        elements.focusBtn.classList.remove('active');
+        console.log('[Renderer] Focus mode OFF');
+      } else {
+        // Activate focus
+        await window.api.focus();
+        elements.focusBtn.classList.add('active');
+        console.log('[Renderer] Focus mode ON');
+      }
+    } catch (err) {
+      console.error('[Renderer] Focus toggle error:', err);
+    }
+  });
+
+  // Mute Toggle
+  elements.muteBtn.addEventListener('click', async () => {
+    const isActive = elements.muteBtn.classList.contains('active');
+
+    try {
+      if (isActive) {
+        // Unmute
+        await window.api.unmute();
+        elements.muteBtn.classList.remove('active');
+        console.log('[Renderer] Mute OFF');
+      } else {
+        // Mute
+        await window.api.mute();
+        elements.muteBtn.classList.add('active');
+        console.log('[Renderer] Mute ON');
+      }
+    } catch (err) {
+      console.error('[Renderer] Mute toggle error:', err);
+    }
+  });
+}
+
+// ========== LANGUAGE ==========
+
 // Load translation files
+let translations = {
+  es: null,
+  en: null,
+  pt: null
+};
+
 async function loadTranslations() {
-  const languages = ['es', 'en', 'pt', 'fr', 'it'];
+  const languages = ['es', 'en', 'pt'];
 
   for (const lang of languages) {
     try {
@@ -39,300 +240,221 @@ async function loadTranslations() {
   await applyLanguage(currentLanguage);
 }
 
-// Apply language to UI
 async function applyLanguage(lang) {
   currentLanguage = lang;
-  const t = translations[lang];
+  console.log(`[Renderer] Language set to: ${lang}`);
 
+  const t = translations[lang];
   if (!t) {
     console.error(`Translations for ${lang} not loaded`);
     return;
   }
 
-  // Update all elements with data-i18n attribute
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const key = el.getAttribute('data-i18n');
-    const value = getNestedProperty(t, key);
+  // Update all UI labels
+  const testVoiceBtn = document.getElementById('test-voice-btn');
+  const startBtn = document.getElementById('start-btn');
+  const stopBtn = document.getElementById('stop-btn');
 
-    if (value) {
-      if (el.tagName === 'INPUT' || el.tagName === 'SELECT') {
-        el.placeholder = value;
-      } else {
-        el.textContent = value;
-      }
-    }
-  });
+  // Update button labels (preserve SVG icons)
+  const speakerIcon = `
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+    </svg>
+  `;
 
-  // Update document lang attribute
-  document.documentElement.lang = lang;
+  const playIcon = `
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M8 5v14l11-7z"/>
+    </svg>
+  `;
 
-  // Notify backend of language change
-  if (window.api) {
+  const stopIcon = `
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="6" y="6" width="12" height="12"/>
+    </svg>
+  `;
+
+  // Update test voice button only (start/stop buttons manage their own state)
+  if (testVoiceBtn) {
+    testVoiceBtn.innerHTML = `${speakerIcon}${t.config.testVoice}`;
+  }
+
+  // DON'T update start/stop innerHTML - it breaks event listeners!
+  // These buttons are set in HTML and should not be dynamically updated
+
+  // Update service config
+  try {
     await window.api.updateConfig({
       language: lang,
-      ai: { language: mapToAILanguage(lang) }
+      ai: { language: lang }
     });
-  }
-}
-
-// Helper to get nested property from object
-function getNestedProperty(obj, path) {
-  return path.split('.').reduce((current, prop) => current?.[prop], obj);
-}
-
-// Map UI language to AI language code
-function mapToAILanguage(uiLang) {
-  const map = {
-    'es': 'es',
-    'en': 'en',
-    'pt': 'pt',
-    'fr': 'fr',
-    'it': 'it'
-  };
-  return map[uiLang] || 'es';
-}
-
-// Load and apply saved configuration
-async function loadConfig() {
-  try {
-    const config = await window.api.loadConfig();
-    console.log('[Renderer] Loaded config:', config);
-
-    if (config) {
-      if (elements.simulatorSelect && config.adapterId) {
-        elements.simulatorSelect.value = config.adapterId;
-      }
-      if (elements.languageSelect && config.language) {
-        currentLanguage = config.language;
-        elements.languageSelect.value = config.language;
-        await applyLanguage(config.language);
-      }
-    }
   } catch (err) {
-    console.error('Failed to load config:', err);
+    console.error('[Renderer] Language config error:', err);
   }
 }
 
-// Update status display
-function updateStatus(status) {
-  elements.statusIndicator.className = 'status-indicator';
-
+function getTestVoiceText() {
   const t = translations[currentLanguage];
+  return t?.voice?.testMessage || 'Test message';
+}
 
-  // Fallback text if translations not loaded
-  const fallbackText = {
-    connected: `Conectado - ${status.sim || 'iRacing'}`,
-    running: 'Ejecutando',
-    disconnected: 'Desconectado',
-    waiting: 'Esperando...'
-  };
+// ========== STATUS UPDATES ==========
 
-  switch (status.state) {
-    case 'connected':
-      elements.statusIndicator.classList.add('connected');
-      elements.statusText.textContent = t?.status?.connected?.replace('{{sim}}', status.sim) || fallbackText.connected;
-      break;
-    case 'running':
-      elements.statusIndicator.classList.add('running');
-      elements.statusText.textContent = t?.status?.running || fallbackText.running;
-      break;
-    case 'waiting':
-      elements.statusIndicator.classList.add('running');
-      elements.statusText.textContent = t?.status?.waiting?.replace('{{sim}}', status.sim) || fallbackText.waiting;
-      break;
-    case 'disconnected':
-    default:
-      elements.statusText.textContent = t?.status?.disconnected || fallbackText.disconnected;
-      break;
+function updateStatus(status) {
+  console.log('[Renderer] Update status:', status);
+
+  const connectionDot = document.querySelector('.connection-dot');
+
+  // Update coach state and connection dot color
+  if (status.state === 'running' || status.state === 'connected' || status.sessionActive) {
+    elements.coachState.textContent = 'Activo';
+    elements.coachState.classList.add('status-active');
+    if (connectionDot) connectionDot.className = 'connection-dot connected';
+
+    // Show STOP button, hide START button
+    if (!isRunning) {
+      isRunning = true;
+      elements.startBtn.classList.add('hidden');
+      elements.stopBtn.classList.remove('hidden');
+    }
+
+  } else if (status.state === 'waiting') {
+    elements.coachState.textContent = 'Esperando...';
+    elements.coachState.classList.remove('status-active');
+    if (connectionDot) connectionDot.className = 'connection-dot waiting';
+
+    // Don't touch buttons during waiting - let click handler manage them
+
+  } else {
+    // Disconnected state
+    elements.coachState.textContent = 'Desconectado';
+    elements.coachState.classList.remove('status-active');
+    if (connectionDot) connectionDot.className = 'connection-dot'; // Red by default
+
+    // Show START button, hide STOP button
+    isRunning = false;
+    elements.stopBtn.classList.add('hidden');
+    elements.startBtn.classList.remove('hidden');
+  }
+
+  // Update sim name
+  if (status.sim) {
+    elements.simName.textContent = status.sim === 'mock-iracing' ? 'iRacing (Mock)' : 'iRacing';
+  } else {
+    elements.simName.textContent = '—';
   }
 }
 
-// Event Listeners
-
-// Simulator change
-elements.simulatorSelect.addEventListener('change', () => {
-  window.api.updateConfig({
-    adapter: { id: elements.simulatorSelect.value }
-  });
-});
-
-// Language change
-elements.languageSelect.addEventListener('change', async () => {
-  const newLang = elements.languageSelect.value;
-  await applyLanguage(newLang);
-});
-
-// Speed slider removed - using fixed speed
-
-// Test Voice button
-elements.testVoiceBtn.addEventListener('click', async () => {
-  const originalText = elements.testVoiceBtn.querySelector('span').textContent;
-  elements.testVoiceBtn.querySelector('span').textContent = '⏱️';
-  elements.testVoiceBtn.disabled = true;
-
-  try {
-    const t = translations[currentLanguage];
-    const testMessage = t?.voice?.testMessage || 'Test message';
-
-    await window.api.testVoice(testMessage, {
-      voice: 'ai-tts' // Use AI TTS instead of Windows
-    });
-
-    elements.testVoiceBtn.querySelector('span').textContent = '✅';
-  } catch (err) {
-    console.error('Test voice failed:', err);
-    elements.testVoiceBtn.querySelector('span').textContent = '❌';
+function updateCoachPanel(status) {
+  // Show/hide audio waves when speaking
+  if (status.audio?.isSpeaking) {
+    elements.audioWaves.style.display = 'flex';
+  } else {
+    elements.audioWaves.style.display = 'none';
   }
 
-  setTimeout(() => {
-    elements.testVoiceBtn.querySelector('span').textContent = originalText;
-    elements.testVoiceBtn.disabled = false;
-  }, 2000);
-});
-
-// RUN button
-elements.runBtn.addEventListener('click', async () => {
-  try {
-    await window.api.startService({
-      adapterId: elements.simulatorSelect.value,
-      language: currentLanguage
-    });
-
-    isRunning = true;
-
-    // Switch to coaching screen
-    document.getElementById('config-screen').classList.remove('active');
-    document.getElementById('coaching-screen').classList.add('active');
-    document.body.classList.add('coaching-active');
-
-    updateStatus({ state: 'running', sim: elements.simulatorSelect.value });
-    startStatusPolling();
-  } catch (err) {
-    console.error('Failed to start:', err);
+  // Update buffer progress
+  if (status.buffer) {
+    const progress = status.buffer.progress || 0;
+    const size = status.buffer.size || 0;
+    elements.bufferProgress.style.width = `${progress}%`;
+    elements.bufferText.textContent = `${size}/300 frames`;
+  } else {
+    elements.bufferProgress.style.width = '0%';
+    elements.bufferText.textContent = '0/300 frames';
   }
-});
 
-// STOP button
-elements.stopBtn.addEventListener('click', async () => {
-  try {
-    await window.api.stopService();
+  // Update last recommendation
+  if (status.ai?.lastRecommendation) {
+    const rec = status.ai.lastRecommendation;
+    elements.lastRecPanel.style.display = 'flex';
 
-    isRunning = false;
+    // Category icons
+    const categoryIcons = {
+      technique: '🎯',
+      engine: '⚙️',
+      brakes: '🔴',
+      tyres: '🛞',
+      strategy: '🧠',
+      track: '🏁'
+    };
 
-    // Switch back to config screen
-    document.getElementById('coaching-screen').classList.remove('active');
-    document.getElementById('config-screen').classList.add('active');
-    document.body.classList.remove('coaching-active');
+    elements.recIcon.textContent = categoryIcons[rec.category] || '💬';
+    elements.recText.textContent = rec.advice;
 
-    updateStatus({ state: 'disconnected' });
-    stopStatusPolling();
-
-    // Reset coaching screen
-    document.getElementById('coach-state').textContent = 'Activo';
-    document.getElementById('buffer-progress').style.width = '0%';
-    document.getElementById('buffer-text').textContent = '0/300';
-    document.getElementById('last-recommendation').style.display = 'none';
-    const audioWaves = document.getElementById('audio-waves');
-    if (audioWaves) audioWaves.style.display = 'none';
-    document.getElementById('speaking-indicator').style.display = 'none';
-  } catch (err) {
-    console.error('Failed to stop:', err);
+    // Timestamp
+    const secondsAgo = Math.floor((Date.now() - rec.timestamp) / 1000);
+    if (secondsAgo < 60) {
+      elements.recTime.textContent = `Hace ${secondsAgo}s`;
+    } else {
+      elements.recTime.textContent = `Hace ${Math.floor(secondsAgo / 60)}m`;
+    }
+  } else {
+    elements.lastRecPanel.style.display = 'none';
   }
-});
+}
 
-// Status polling (every 1.5 seconds when active)
+// ========== STATUS POLLING ==========
+
 let statusPollInterval = null;
 
 function startStatusPolling() {
   if (statusPollInterval) return;
 
+  console.log('[Renderer] Starting status polling');
+
   statusPollInterval = setInterval(async () => {
     try {
       const status = await window.api.getStatus();
-      console.log('[Status Poll]', status);
       updateStatus(status);
       updateCoachPanel(status);
-      updateSpeakingIndicator(status);
 
+      // Auto-stop if disconnected
       if (status.state === 'disconnected' && isRunning) {
-        console.log('[Status Poll] Resetting to disconnected');
+        console.log('[Renderer] Auto-stopping (disconnected)');
         isRunning = false;
         elements.stopBtn.classList.add('hidden');
-        elements.runBtn.classList.remove('hidden');
+        elements.startBtn.classList.remove('hidden');
         stopStatusPolling();
       }
     } catch (err) {
-      console.error('[Status Poll] Error:', err);
+      console.error('[Renderer] Status poll error:', err);
     }
   }, 1500);
 }
 
+// ========== STATUS POLLING ==========
+
+let statusPollingInterval = null;
+
+function startStatusPolling() {
+  console.log('[Renderer] Starting status polling');
+
+  // Clear any existing interval
+  if (statusPollingInterval) {
+    clearInterval(statusPollingInterval);
+  }
+
+  // Poll every 1 second
+  statusPollingInterval = setInterval(async () => {
+    try {
+      const status = await window.api.getStatus();
+      updateStatus(status);
+    } catch (err) {
+      console.error('[Renderer] Status poll error:', err);
+    }
+  }, 1000);
+}
+
 function stopStatusPolling() {
   if (statusPollInterval) {
+    console.log('[Renderer] Stopping status polling');
     clearInterval(statusPollInterval);
     statusPollInterval = null;
   }
 }
 
-function updateCoachPanel(status) {
-  const coachState = document.getElementById('coach-state');
-  const audioWaves = document.getElementById('audio-waves');
-  const bufferProgress = document.getElementById('buffer-progress');
-  const bufferText = document.getElementById('buffer-text');
-  const lastRecPanel = document.getElementById('last-recommendation');
-  const recIcon = document.getElementById('rec-icon');
-  const recText = document.getElementById('rec-text');
-  const recTime = document.getElementById('rec-time');
+// ========== EXPORTS ==========
 
-  // Update coach state and show audio waves when speaking
-  if (status.sessionActive) {
-    coachState.textContent = 'Activo';
-    coachState.style.color = '#00ff88';
-    coachState.classList.add('status-active');
-
-    // Show audio waves when coach is speaking
-    if (audioWaves && status.audio?.isSpeaking) {
-      audioWaves.style.display = 'flex';
-    } else if (audioWaves) {
-      audioWaves.style.display = 'none';
-    }
-  } else {
-    coachState.textContent = 'Inactivo';
-    coachState.style.color = '#94a3b8';
-    coachState.classList.remove('status-active');
-    if (audioWaves) audioWaves.style.display = 'none';
-  }
-
-  // Update buffer display (now shows 0/300 instead of 0/600)
-  if (status.buffer) {
-    const progress = status.buffer.progress || 0;
-    bufferProgress.style.width = `${progress}%`;
-    bufferText.textContent = `${status.buffer.size}/300`;
-  } else {
-    bufferProgress.style.width = '0%';
-    bufferText.textContent = '0/300';
-  }
-
-  // Update last recommendation with timestamp
-  if (status.ai?.lastRecommendation) {
-    const rec = status.ai.lastRecommendation;
-    lastRecPanel.style.display = 'flex';
-    const categoryIcons = { technique: '🎯', engine: '⚙️', brakes: '🔴', tyres: '🛞', strategy: '🧠', track: '🏁' };
-    if (recIcon) recIcon.textContent = categoryIcons[rec.category] || '💬';
-    recText.textContent = rec.advice;
-    const secondsAgo = Math.floor((Date.now() - rec.timestamp) / 1000);
-    recTime.textContent = secondsAgo < 60 ? `Hace ${secondsAgo}s` : `Hace ${Math.floor(secondsAgo / 60)}m`;
-  } else {
-    lastRecPanel.style.display = 'none';
-  }
-}
-
-function updateSpeakingIndicator(status) {
-  const speakingIndicator = document.getElementById('speaking-indicator');
-  speakingIndicator.style.display = status.audio?.isSpeaking ? 'flex' : 'none';
-}
-
-// Initialize
-loadTranslations().then(() => {
-  loadConfig();
-});
+console.log('[Renderer] Unified screen renderer loaded');
