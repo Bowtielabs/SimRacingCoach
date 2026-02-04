@@ -31,6 +31,9 @@
         "connected": "Conectado a {{sim}}",
         "running": "Entrenamiento activo"
     },
+    "buffer": {
+        "title": "Recolectando telemetría"
+    },
     "voice": {
         "testMessage": "Hola, soy tu entrenador virtual de SimRacing. Estoy listo para ayudarte a mejorar tu conducción."
     }

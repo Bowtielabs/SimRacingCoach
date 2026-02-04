@@ -45,7 +45,7 @@ function closeSplash() {
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1000,
-    height: 720,
+    height: 800, // Increased to fit buffer + recommendations feed
     show: false,  // Don't show until ready
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

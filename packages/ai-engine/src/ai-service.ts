@@ -128,8 +128,9 @@ export class AICoachingService {
     async startSession(context: SessionContext): Promise<void> {
         this.sessionContext = context;
         this.frameBuffer = [];
-        this.bufferStartTime = Date.now();
+        this.bufferStartTime = 0; // Start at 0 so first frame initializes it
         this.hasGivenInitialGreeting = false;
+        this.recommendationHistory = []; // Clear old recommendations from previous session
         if (DEBUG.LIFECYCLE) console.log('[AIService] Session started');
     }
 
@@ -165,19 +166,20 @@ export class AICoachingService {
         // Initialize buffer start time on first frame
         if (this.bufferStartTime === 0) {
             this.bufferStartTime = Date.now();
-            if (DEBUG.BUFFER) console.log('[Buffer] ▶ Buffer started, collecting frames for 30s...');
+            if (DEBUG.BUFFER) console.log('[Buffer] ▶ Buffer started, collecting frames for 10s...');
         }
 
         // 4. Log buffer progress every 5 seconds (~300 frames at 60fps)
         const elapsed = Date.now() - this.bufferStartTime;
         if (DEBUG.BUFFER && this.frameBuffer.length % 300 === 0) {
-            const progress = Math.min(100, (elapsed / 30000) * 100);
+            const progress = Math.min(100, (elapsed / 10000) * 100);
             console.log(`[Buffer] 📊 frames=${this.frameBuffer.length}, elapsed=${(elapsed / 1000).toFixed(1)}s/30s (${progress.toFixed(0)}%), isProcessing=${this.isProcessingBuffer}`);
         }
 
-        // 5. Every 30 seconds, process buffer and send to rules engine
-        if (elapsed >= 30000 && !this.isProcessingBuffer) {
-            if (DEBUG.BUFFER) console.log(`[Buffer] ⏰ 30s reached! Calling processBufferAndSendToEngine...`);
+        // 5. Every 10 seconds, process buffer and send to rules engine
+        if (elapsed >= 10000 && !this.isProcessingBuffer) {
+            if (DEBUG.BUFFER) console.log(`[Buffer] ⏰ 10s reached! Calling processBufferAndSendToEngine...`);
+            this.bufferStartTime = 0; // Reset immediately so progress bar goes to 0% while processing
             await this.processBufferAndSendToEngine();
         }
     }
@@ -355,10 +357,9 @@ export class AICoachingService {
                 console.log('[AIService] ℹ️ No hay consejos aplicables');
             }
 
-            // Clear buffer and reset timer
+            // Clear buffer (bufferStartTime already reset when 10s was reached)
             this.frameBuffer = [];
-            this.bufferStartTime = Date.now();
-            console.log('[AIService] ✓ Buffer cleared, starting new 30s window');
+            console.log('[AIService] ✓ Buffer cleared, ready for new 10s window');
 
         } catch (error) {
             console.error('[AIService] ❌ Error processing buffer:', error);
@@ -396,10 +397,11 @@ export class AICoachingService {
     }
 
     getStatus() {
-        const targetFrames = 600; // 30s * 20fps
+        const targetFrames = 200; // 10s * ~20fps (realistic frame rate from mock)
         const currentFrames = this.frameBuffer.length;
-        const elapsed = Date.now() - this.bufferStartTime;
-        const secondsToAnalysis = Math.max(0, (30000 - elapsed) / 1000);
+        const elapsed = this.bufferStartTime > 0 ? Date.now() - this.bufferStartTime : 0; // Handle reset case
+        const secondsToAnalysis = Math.max(0, (10000 - elapsed) / 1000);
+        const timeBasedProgress = this.bufferStartTime > 0 ? Math.min(100, Math.round((elapsed / 10000) * 100)) : 0; // 0% when reset
 
         return {
             initialized: this.initialized,
@@ -415,7 +417,7 @@ export class AICoachingService {
             buffer: {
                 size: currentFrames,
                 target: targetFrames,
-                progress: Math.min(100, Math.round((currentFrames / targetFrames) * 100)),
+                progress: timeBasedProgress, // Now based on time elapsed (0-100% over 10s)
                 secondsToAnalysis: Math.round(secondsToAnalysis)
             },
 

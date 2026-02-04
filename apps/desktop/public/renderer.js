@@ -19,6 +19,11 @@ const elements = {
   audioWaves: document.getElementById('audio-waves'),
   simName: document.getElementById('sim-name'),
 
+  // Main content - Buffer Progress
+  bufferTimer: document.getElementById('buffer-timer'),
+  bufferProgressBar: document.getElementById('buffer-progress-bar'),
+  bufferPercentage: document.getElementById('buffer-percentage'),
+
   // Main content - Recommendations Feed
   feedCount: document.getElementById('feed-count'),
   recList: document.getElementById('recommendations-list'),
@@ -116,6 +121,9 @@ function setupEventListeners() {
       console.log('[Renderer] Already running, ignoring click');
       return;
     }
+
+    // Clear old recommendations from UI
+    clearRecommendationsFeed();
 
     try {
       const sim = elements.simulatorSelect.value;
@@ -386,7 +394,38 @@ function updateStatus(status) {
   }
 }
 
+function clearRecommendationsFeed() {
+  // Reset feed to empty state
+  elements.feedCount.textContent = '0';
+  elements.recList.innerHTML = `
+    <div class="feed-empty">
+      <span class="empty-icon">💬</span>
+      <p>Aún no hay recomendaciones</p>
+    </div>
+  `;
+}
+
+function updateBufferProgress(bufferData) {
+  if (!bufferData || !elements.bufferProgressBar) return;
+
+  const { progress, secondsToAnalysis } = bufferData;
+
+  // Update progress bar
+  elements.bufferProgressBar.style.width = `${progress}%`;
+
+  // Update timer
+  elements.bufferTimer.textContent = `${secondsToAnalysis}s`;
+
+  // Update percentage
+  elements.bufferPercentage.textContent = `${progress}%`;
+}
+
 function updateCoachPanel(status) {
+  // Update buffer progress
+  if (status.ai?.buffer) {
+    updateBufferProgress(status.ai.buffer);
+  }
+
   console.log('[CoachPanel] status.ai:', status.ai);
   console.log('[CoachPanel] status.ai?.recommendations:', status.ai?.recommendations);
 
@@ -397,12 +436,10 @@ function updateCoachPanel(status) {
     elements.audioWaves.style.display = 'none';
   }
 
-  // Update recommendations feed (check both locations)
+  // Update recommendations feed
   const recommendations = status.ai?.recommendations || status.recommendations;
   if (recommendations && recommendations.length > 0) {
     updateRecommendationsFeed(recommendations);
-  } else {
-    console.log('[CoachPanel] No recommendations found');
   }
 }
 
