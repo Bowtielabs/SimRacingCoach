@@ -1,11 +1,20 @@
 import { TelemetryRule } from './telemetry-rules-engine';
+import { SUSPENSION_RULES } from './rules/suspension-rules.js';
+import { AERO_RULES } from './rules/aero-rules.js';
+import { ADVANCED_RULES } from './rules/advanced-rules.js';
 
 /**
- * 30 REGLAS DE ANÁLISIS DE TELEMETRÍA - INGENIERO DE CARRERAS
+ * 80+ REGLAS DE ANÁLISIS DE TELEMETRÍA - INGENIERO DE CARRERAS
  * Motor de evaluación avanzado para conducción en SimRacing
  * TODAS LAS REGLAS INCLUYEN VALIDACIÓN DEFENSIVA DE DATOS
  */
 export const TELEMETRY_RULES: TelemetryRule[] = [
+    // Include Phase 6 Rules (Pro Engineer)
+    ...ADVANCED_RULES,
+    // Include Phase 5 Rules
+    ...SUSPENSION_RULES,
+    ...AERO_RULES,
+
     // ========================================
     // CATEGORÍA 1: TÉCNICA DE PEDALES
     // ========================================

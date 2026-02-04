@@ -15,6 +15,24 @@ export interface NormalizedFrame {
     brake_pct?: number | null;
     clutch_pct?: number | null;
     steering_rad?: number | null;
+    lateral_g?: number | null;
+    longitudinal_g?: number | null;
+    suspension?: {
+        shockDeflection?: number[];
+        rideHeight?: number[];
+    } | null;
+    aero?: {
+        rake?: number;
+        frontRideHeight?: number;
+        rearRideHeight?: number;
+    } | null;
+    carControls?: {
+        absActive?: boolean;
+        tcActive?: boolean;
+        tcLevel?: number;
+        absLevel?: number;
+        bias?: number;
+    } | null;
     position?: number | null;
     class_position?: number | null;
     lap?: number | null;

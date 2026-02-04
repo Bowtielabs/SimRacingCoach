@@ -373,6 +373,35 @@ export class IracingAdapter extends EventEmitter {
         manifoldPressure: this.getVar('ManifoldPress'),
       },
 
+      // Suspension & Aero (Phase 5)
+      suspension: {
+        rideHeight: [
+          this.getVar('LFrideHeight'),
+          this.getVar('RFrideHeight'),
+          this.getVar('LRrideHeight'),
+          this.getVar('RRrideHeight')
+        ],
+        shockDeflection: [
+          this.getVar('LFshockDefl'),
+          this.getVar('RFshockDefl'),
+          this.getVar('LRshockDefl'),
+          this.getVar('RRshockDefl')
+        ],
+        shockVelocity: [
+          this.getVar('LFshockVel'),
+          this.getVar('RFshockVel'),
+          this.getVar('LRshockVel'),
+          this.getVar('RRshockVel')
+        ],
+      },
+
+      aero: {
+        frontRideHeight: this.avgTemp('LFrideHeight', 'LFrideHeight', 'RFrideHeight'), // Avg Front using existing helper hack
+        rearRideHeight: this.avgTemp('LRrideHeight', 'LRrideHeight', 'RRrideHeight'), // Avg Rear
+        // Rake calculated on the fly or by rules engine. Here we just map raw values.
+        // We can pre-calculate rake if helpful, but let's stick to raw data mapping.
+      },
+
       engineWarnings: this.getVar('EngineWarnings'),
 
       // Tire compound

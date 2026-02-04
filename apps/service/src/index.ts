@@ -182,6 +182,16 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
       current: typeof data.lap_times?.current === 'number' ? data.lap_times.current : undefined,
     },
     engineWarnings: typeof data.engine_warnings === 'number' ? data.engine_warnings : undefined,
+
+    // New mappings for ACC/Advanced Physics
+    physics: {
+      steeringAngle: typeof data.steering_rad === 'number' ? data.steering_rad : undefined,
+      lateralG: typeof data.lateral_g === 'number' ? data.lateral_g : undefined,
+      longitudinalG: typeof data.longitudinal_g === 'number' ? data.longitudinal_g : undefined,
+    },
+    suspension: data.suspension, // Passthrough if provided
+    aero: data.aero, // Passthrough if provided
+    carControls: data.carControls // Passthrough
   };
 
   // Send to AI service
@@ -306,9 +316,15 @@ function startAdapter(which: AdapterId) {
   }
 
   // Determinar el path del adapter basado en el ID
-  const adapterPath = which === 'mock-iracing'
-    ? path.join(process.cwd(), '../adapters/mock-iracing/adapter.js')
-    : path.join(process.cwd(), '../adapters/iracing-node/adapter.mjs');
+  let adapterPath = '';
+  if (which === 'mock-iracing') {
+    adapterPath = path.join(process.cwd(), '../adapters/mock-iracing/adapter.js');
+  } else if (which === 'acc') {
+    adapterPath = path.join(process.cwd(), '../adapters/acc/adapter.mjs');
+  } else {
+    // Default to iRacing
+    adapterPath = path.join(process.cwd(), '../adapters/iracing-node/adapter.mjs');
+  }
 
   // console.log(`[Service] 🔌 Starting adapter: ${which} from ${adapterPath}`);
 

@@ -387,8 +387,17 @@ function updateStatus(status) {
   }
 
   // Update sim name
+  const SIM_DISPLAY_NAMES = {
+    'iracing': 'iRacing',
+    'mock-iracing': 'iRacing (Mock)',
+    'acc': 'Assetto Corsa',
+    'ac': 'Assetto Corsa',
+    'rfactor2': 'rFactor 2',
+    'ams2': 'Automobilista 2'
+  };
+
   if (status.sim) {
-    elements.simName.textContent = status.sim === 'mock-iracing' ? 'iRacing (Mock)' : 'iRacing';
+    elements.simName.textContent = SIM_DISPLAY_NAMES[status.sim] || status.sim;
   } else {
     elements.simName.textContent = '—';
   }

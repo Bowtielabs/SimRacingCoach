@@ -65,6 +65,30 @@ export interface TelemetryFrame {
     current?: number;
   };
   engineWarnings?: number;
+
+  suspension?: {
+    rideHeight?: number[];      // [FL, FR, RL, RR] in meters
+    shockDeflection?: number[]; // [FL, FR, RL, RR] in meters
+    shockVelocity?: number[];   // [FL, FR, RL, RR] in m/s
+  };
+
+  aero?: {
+    frontRideHeight?: number;
+    rearRideHeight?: number;
+    rake?: number;
+  };
+  carControls?: {
+    absActive?: boolean;
+    tcActive?: boolean;
+    tcLevel?: number;
+    absLevel?: number;
+    bias?: number;
+  };
+  p2p?: {
+    count?: number;
+    status?: boolean;
+    active?: boolean;
+  };
 }
 
 export interface CapabilityMap {

@@ -43,6 +43,13 @@ export interface TelemetryAnalysis {
         lapsSinceLastPit: number;
         fuelUsedInBuffer: number;
         isImproving: boolean;
+        bottomingCount: number;
+        rakeInstabilityCount: number;
+        // Phase 6: Advanced Dynamics
+        understeerFactor: number; // >0 means understeer tendency
+        oversteerFactor: number;  // >0 means oversteer tendency
+        tractionLossCount: number; // instances of wheelspin
+        trailBrakingQuality: number; // 0-1, 1 is perfect progressive release
     };
     lapTimes: {
         best: number;
@@ -198,7 +205,14 @@ export class TelemetryRulesEngine {
                     incidentCount: current.session?.incidents || 0,
                     lapsSinceLastPit: 0,
                     fuelUsedInBuffer: 0,
-                    isImproving: false
+                    isImproving: false,
+                    bottomingCount: 0,
+                    rakeInstabilityCount: 0,
+                    // Phase 6 placeholders
+                    understeerFactor: 0,
+                    oversteerFactor: 0,
+                    tractionLossCount: 0,
+                    trailBrakingQuality: 0
                 },
                 lapTimes: {
                     best: current.lapTimes?.best || 0,
@@ -254,6 +268,63 @@ export class TelemetryRulesEngine {
             }
         }
 
+        // Phase 5: Suspension & Aero Patterns
+        const bottomingCount = last30sec.filter(f => {
+            if (!f.suspension?.shockDeflection) return false;
+            // > 0.12m heuristic
+            return f.suspension.shockDeflection.some(d => Math.abs(d) > 0.12);
+        }).length;
+
+        let rakeInstabilityCount = 0;
+        // Check rake variance
+        for (let i = 1; i < last30sec.length; i++) {
+            const prevAero = last30sec[i - 1].aero;
+            const currAero = last30sec[i].aero;
+            if (prevAero?.rake !== undefined && currAero?.rake !== undefined) {
+                if (Math.abs(currAero.rake - prevAero.rake) > 0.005) {
+                    rakeInstabilityCount++;
+                }
+            }
+        }
+
+        // Phase 6: Advanced Dynamics Calculation
+        // 1. Traction Loss (Wheelspin)
+        let tractionLossCount = 0;
+        for (let i = 1; i < last30sec.length; i++) {
+            const prev = last30sec[i - 1];
+            const curr = last30sec[i];
+            if ((curr.powertrain?.rpm || 0) - (prev.powertrain?.rpm || 0) > 500 &&
+                (curr.powertrain?.speedKph || 0) - (prev.powertrain?.speedKph || 0) < 2 &&
+                (curr.powertrain?.throttle || 0) > 0.5 &&
+                (curr.powertrain?.gear || 0) < 4) {
+                tractionLossCount++;
+            }
+        }
+
+        // 2. Understeer/Oversteer (Simplified Heuristics)
+        const avgSteeringAbs = avgSteering;
+        const avgLatGAbs = avgLateralG;
+
+        let understeerFactor = 0;
+        // High Speed Understeer: High steering (>30 deg) but low G (< 1G) at speed (>80kph)
+        if (avgSteeringAbs > 30 && avgLatGAbs < 10 && avgSpeed > 80) {
+            understeerFactor = (avgSteeringAbs / Math.max(1, avgLatGAbs)) * 0.1;
+        }
+
+        let oversteerFactor = 0;
+        // Opposite lock detection
+        const counterSteerEvents = last30sec.filter(f => {
+            const steer = f.physics?.steeringAngle || 0;
+            const latG = f.physics?.lateralG || 0;
+            const speed = f.powertrain?.speedKph || 0;
+            return speed > 50 && Math.abs(steer) > 5 && (steer * latG) < 0;
+        }).length;
+        if (counterSteerEvents > 5) oversteerFactor = 1;
+
+        // 3. Trail Braking Quality (Placeholder - requires detailed release analysis)
+        let trailBrakingQuality = 0.5;
+
+
         return {
             current,
             last30sec,
@@ -279,7 +350,14 @@ export class TelemetryRulesEngine {
                 incidentCount,
                 lapsSinceLastPit: 0, // Habría que trackearlo en sesión
                 fuelUsedInBuffer,
-                isImproving
+                isImproving,
+                bottomingCount,
+                rakeInstabilityCount,
+                // Phase 6 populated
+                understeerFactor,
+                oversteerFactor,
+                tractionLossCount,
+                trailBrakingQuality
             },
             lapTimes: {
                 best: current.lapTimes?.best || 0,
