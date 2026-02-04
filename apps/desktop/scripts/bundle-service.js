@@ -118,9 +118,26 @@ fs.copySync(adaptersSrc, adaptersDest, {
     }
 });
 
-// Explicitly ensure critical dependencies are copied
+
+// Copy Prerendered Audio
+console.log('  Copying prerendered audio...');
+// Check both possible locations (root core vs packages/core)
+const audioSrcRoot = path.join(rootDir, 'core/ai_engines/piper/prerendered');
+const audioSrcPkg = path.join(rootDir, 'packages/core/ai_engines/piper/prerendered');
+const audioSrc = fs.existsSync(audioSrcRoot) ? audioSrcRoot : audioSrcPkg;
+
+const audioDest = path.join(resourcesDir, 'service/core/ai_engines/piper/prerendered');
+
+if (fs.existsSync(audioSrc)) {
+    fs.ensureDirSync(path.dirname(audioDest));
+    fs.copySync(audioSrc, audioDest);
+    console.log(`    ✓ Copied audio from ${audioSrc}`);
+} else {
+    console.warn(`    ⚠ Prerendered audio not found at ${audioSrcRoot} or ${audioSrcPkg}`);
+}
+
 console.log('  Ensuring critical dependencies...');
-const criticalDeps = ['irsdk-node', 'pino', 'edge-tts'];
+const criticalDeps = ['irsdk-node', 'pino', 'edge-tts', 'sound-play'];
 const rootNodeModules = path.join(rootDir, 'node_modules');
 
 criticalDeps.forEach(dep => {

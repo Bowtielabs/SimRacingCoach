@@ -5,7 +5,7 @@
  * 3. Speak advice via Piper
  */
 
-import { LlamaCppAgent, PiperAgent, AICoachingService } from '@simracing/ai-engine';
+import { LlamaCppAgent, PrerenderedAudioAgent, AICoachingService } from '@simracing/ai-engine';
 import type { TelemetryFrame } from '@simracing/core';
 
 async function testCoachingPipeline() {
@@ -13,13 +13,13 @@ async function testCoachingPipeline() {
 
     try {
         // Step 1: Initialize agents
-        console.log('[1/4] Initializing LLM and Piper agents...');
+        console.log('[1/4] Initializing LLM and Audio agents...');
         const llm = new LlamaCppAgent();
         await llm.start();
         llm.setLanguage('es');
 
-        const piper = new PiperAgent();
-        await piper.initialize();
+        const audio = new PrerenderedAudioAgent();
+        await audio.initialize();
         console.log('✅ Agents initialized\n');
 
         // Step 2: Create AI Coaching Service with external agents
@@ -28,7 +28,7 @@ async function testCoachingPipeline() {
             enabled: true,
             mode: 'ai',
             language: { stt: 'es', tts: 'es' }
-        }, llm, piper);
+        }, audio);
 
         await aiService.initialize();
         console.log('✅ AI Service initialized\n');

@@ -15,7 +15,7 @@ const DEBUG = {
 // ═══════════════════════════════════════════════════════════════
 
 import type { TelemetryFrame } from '@simracing/core';
-import { PiperAgent } from './piper-agent.js';
+import { PrerenderedAudioAgent } from './prerendered-audio-agent.js';
 import { TelemetryRulesEngine } from './telemetry-rules-engine.js';
 import { spawn } from 'child_process';
 import path from 'path';
@@ -61,7 +61,7 @@ const DEFAULT_CONFIG: AIServiceConfig = {
 
 export class AICoachingService {
     private config: AIServiceConfig;
-    private tts: PiperAgent;
+    private tts: PrerenderedAudioAgent;
     private rulesEngine: TelemetryRulesEngine;
 
     // Simple buffer system
@@ -93,7 +93,7 @@ export class AICoachingService {
         timestamp: number;
     }> = [];
 
-    constructor(config: Partial<AIServiceConfig> = {}, externalTts?: PiperAgent) {
+    constructor(config: Partial<AIServiceConfig> = {}, externalTts?: PrerenderedAudioAgent) {
         this.config = { ...DEFAULT_CONFIG, ...config };
 
         if (externalTts) {
@@ -101,8 +101,8 @@ export class AICoachingService {
             this.tts = externalTts;
             this.externalAgents = true;
         } else {
-            if (DEBUG.LIFECYCLE) console.log('[AIService] Creating new TTS agent');
-            this.tts = new PiperAgent(this.config.tts);
+            if (DEBUG.LIFECYCLE) console.log('[AIService] Creating new Audio agent');
+            this.tts = new PrerenderedAudioAgent();
             this.externalAgents = false;
         }
 

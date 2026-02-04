@@ -174,6 +174,7 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
       sessionTime: typeof data.session_time === 'number' ? data.session_time : undefined,
       sessionLapsRemain: typeof data.session_laps_remain === 'number' ? data.session_laps_remain : undefined,
       sessionTimeRemain: typeof data.session_time_remain === 'number' ? data.session_time_remain : undefined,
+      lapDistPct: typeof data.lap_dist_pct === 'number' ? data.lap_dist_pct : undefined,
     },
     lapTimes: {
       best: typeof data.lap_times?.best === 'number' ? data.lap_times.best : undefined,
@@ -517,7 +518,7 @@ process.on('SIGINT', async () => {
 // Initialize LLM and Piper services
 (async () => {
   try {
-    const { LlamaCppAgent, PiperAgent } = await import('@simracing/ai-engine');
+    const { LlamaCppAgent, PiperAgent, PrerenderedAudioAgent } = await import('@simracing/ai-engine');
 
     // Start LLM (Disabled per user request - using Rules Engine only)
     /*
@@ -529,10 +530,10 @@ process.on('SIGINT', async () => {
     // console.log('[Service] ℹ️ LLM is disabled. Rules Engine will handle all coaching.');
 
     // Initialize Piper (keep instance alive)
-    // console.log('[Service] Starting Piper...');
-    piperAgent = new PiperAgent();
+    // console.log('[Service] Starting Prerendered Audio...');
+    piperAgent = new PrerenderedAudioAgent();
     await piperAgent.initialize();
-    console.log('[Service] ✅ Piper ready (with prerendered audio) - Sistema iniciado');
+    console.log('[Service] ✅ Audio System ready - Sistema iniciado');
 
     // Check if adapter is already connected and initialize AI if needed
     if (adapterStatus?.state === 'connected' && !aiService) {

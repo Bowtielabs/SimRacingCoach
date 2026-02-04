@@ -250,117 +250,146 @@ export class PatternAnalyzer {
      * Analyze tire wear patterns
      */
     private analyzeTireWear(frames: TelemetryFrame[]): DrivingPattern | null {
-        // TODO: Implement tire wear analysis
-        // Requires tire temperature/pressure telemetry
+        const lastFrame = frames[frames.length - 1];
+        if (!lastFrame?.temps?.tyreC) return null;
+
+        const temps = lastFrame.temps.tyreC;
+        if (temps.length < 4) return null;
+
+        const avgTemp = temps.reduce((a, b) => a + b, 0) / temps.length;
+        const maxTemp = Math.max(...temps);
+        const speed = lastFrame.powertrain?.speedKph || 0;
+
+        if (speed < 50) return null;
+
+        if (maxTemp > 100) {
+            return {
+                type: 'tire_wear',
+                severity: 'high',
+                occurrences: 1,
+                location: this.estimateLocation(),
+                recommendation: 'tyres-overheating',
+                detectedAt: lastFrame.t,
+                frames: [frames.length - 1]
+            };
+        }
+
+        if (avgTemp < 65) {
+            return {
+                type: 'tire_wear',
+                severity: 'medium',
+                occurrences: 1,
+                location: this.estimateLocation(),
+                recommendation: 'tyres-too-cold',
+                detectedAt: lastFrame.t,
+                frames: [frames.length - 1]
+            };
+        }
+
+        const leftAvg = (temps[0] + temps[2]) / 2;
+        const rightAvg = (temps[1] + temps[3]) / 2;
+        if (Math.abs(leftAvg - rightAvg) > 20) {
+            return {
+                type: 'tire_wear',
+                severity: 'low',
+                occurrences: 1,
+                location: this.estimateLocation(),
+                recommendation: 'thermal-imbalance-lr',
+                detectedAt: lastFrame.t,
+                frames: [frames.length - 1]
+            };
+        }
+
         return null;
     }
 
-    /**
-     * Analyze fuel usage
-     */
     private analyzeFuelUsage(frames: TelemetryFrame[]): DrivingPattern | null {
-        // TODO: Implement fuel usage analysis
-        // Requires fuel level telemetry
+        const lastFrame = frames[frames.length - 1];
+        if (lastFrame?.fuel?.level !== undefined) {
+            if (lastFrame.fuel.level < 5.0 && lastFrame.fuel.level > 0.1) {
+                return {
+                    type: 'fuel_usage',
+                    severity: 'high',
+                    occurrences: 1,
+                    location: this.estimateLocation(),
+                    recommendation: 'fuel-critical-low',
+                    detectedAt: lastFrame.t,
+                    frames: [frames.length - 1]
+                };
+            }
+        }
         return null;
     }
 
-    /**
-     * Detect anomalies (sudden changes)
-     */
     detectAnomalies(currentFrame: TelemetryFrame, history: TelemetryFrame[]): Anomaly[] {
         const anomalies: Anomaly[] = [];
-
         if (history.length < 10) return anomalies;
-
         const recentFrames = history.slice(-10);
 
-        // Sudden speed drop (possible collision)
         const speedDropAnomaly = this.detectSuddenSpeedDrop(currentFrame, recentFrames);
         if (speedDropAnomaly) anomalies.push(speedDropAnomaly);
 
-        // Temperature spike
         const tempAnomaly = this.detectTemperatureSpike(currentFrame, recentFrames);
         if (tempAnomaly) anomalies.push(tempAnomaly);
 
         return anomalies;
     }
 
-    /**
-     * Detect sudden speed drop
-     */
     private detectSuddenSpeedDrop(current: TelemetryFrame, recent: TelemetryFrame[]): Anomaly | null {
         const currentSpeed = current.powertrain?.speedKph || 0;
         const avgRecentSpeed = recent.reduce((sum, f) => sum + (f.powertrain?.speedKph || 0), 0) / recent.length;
-
         const speedDrop = avgRecentSpeed - currentSpeed;
         const dropPercentage = speedDrop / avgRecentSpeed;
 
-        // >30% speed drop in less than 0.5 seconds
         if (dropPercentage > 0.3 && avgRecentSpeed > 50) {
             return {
                 type: 'sudden_deceleration',
                 severity: 'critical',
                 description: `Caída brusca de velocidad: ${speedDrop.toFixed(0)} km/h`,
-                telemetrySnapshot: {
-                    powertrain: current.powertrain,
-                    t: current.t
-                },
+                telemetrySnapshot: { powertrain: current.powertrain, t: current.t },
                 timestamp: current.t
             };
         }
-
         return null;
     }
 
-    /**
-     * Detect temperature spike
-     */
     private detectTemperatureSpike(current: TelemetryFrame, recent: TelemetryFrame[]): Anomaly | null {
         const currentWaterTemp = current.temps?.waterC || 0;
         const avgWaterTemp = recent.reduce((sum, f) => sum + (f.temps?.waterC || 0), 0) / recent.length;
-
         const tempIncrease = currentWaterTemp - avgWaterTemp;
 
-        // >10°C increase in short time
         if (tempIncrease > 10) {
             return {
                 type: 'temperature_spike',
                 severity: 'high',
                 description: `Temperatura del agua subió ${tempIncrease.toFixed(1)}°C`,
-                telemetrySnapshot: {
-                    temps: current.temps,
-                    t: current.t
-                },
+                telemetrySnapshot: { temps: current.temps, t: current.t },
                 timestamp: current.t
             };
         }
-
         return null;
     }
 
-    /**
-     * Helper: Calculate deceleration rate
-     */
     private calculateDeceleration(frames: TelemetryFrame[]): number {
         if (frames.length < 2) return 0;
-
         const first = frames[0];
         const last = frames[frames.length - 1];
-
         const speedDiff = (first.powertrain?.speedKph || 0) - (last.powertrain?.speedKph || 0);
-        const timeDiff = (last.t - first.t) / 1000; // seconds
-
-        // Convert km/h to m/s and divide by time
+        const timeDiff = (last.t - first.t) / 1000;
         return (speedDiff / 3.6) / timeDiff;
     }
 
-    /**
-     * Helper: Estimate current location (corner, sector)
-     */
     private estimateLocation(): string {
-        // TODO: Implement track position detection
-        // For now, return generic
-        return 'curva actual';
+        const lastFrame = this.frameHistory[this.frameHistory.length - 1];
+        if (!lastFrame) return 'unknown';
+
+        const pct = lastFrame.session?.lapDistPct;
+        if (typeof pct === 'number') {
+            if (pct < 0.33) return 'Sector 1';
+            if (pct < 0.66) return 'Sector 2';
+            return 'Sector 3';
+        }
+        return 'on track';
     }
 
     /**

@@ -57,6 +57,7 @@ export interface TelemetryFrame {
     sessionTime?: number;
     sessionLapsRemain?: number;
     sessionTimeRemain?: number;
+    lapDistPct?: number; // 0.0 to 1.0
   };
   lapTimes?: {
     best?: number;
