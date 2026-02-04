@@ -392,8 +392,9 @@ function updateStatus(status) {
     'mock-iracing': 'iRacing (Mock)',
     'acc': 'Assetto Corsa',
     'ac': 'Assetto Corsa',
-    'rfactor2': 'rFactor 2',
-    'ams2': 'Automobilista 2'
+    'ams2': 'Automobilista 2',
+    'actc': 'ACTC / rFactor 1',
+    'rfactor2': 'rFactor 2'
   };
 
   if (status.sim) {

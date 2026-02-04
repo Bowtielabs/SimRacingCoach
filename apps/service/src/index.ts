@@ -321,6 +321,10 @@ function startAdapter(which: AdapterId) {
     adapterPath = path.join(process.cwd(), '../adapters/mock-iracing/adapter.js');
   } else if (which === 'acc') {
     adapterPath = path.join(process.cwd(), '../adapters/acc/adapter.mjs');
+  } else if (which === 'ams2') {
+    adapterPath = path.join(process.cwd(), '../adapters/ams2/adapter.mjs');
+  } else if (which === 'actc') {
+    adapterPath = path.join(process.cwd(), '../adapters/actc/adapter.mjs');
   } else {
     // Default to iRacing
     adapterPath = path.join(process.cwd(), '../adapters/iracing-node/adapter.mjs');

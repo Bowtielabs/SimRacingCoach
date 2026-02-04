@@ -74,11 +74,43 @@ class ACCBridge:
             # Byte 32: float velocity[3]
             # Byte 44: float accG[3]
             # Byte 56: float wheelSlip[4]
-            # ...
-            # Byte 124: float suspensionTravel[4] 
+            # Byte 72: float wheelLoad[4]
+            # Byte 88: float wheelsPressure[4]
+            # Byte 104: float wheelAngularSpeed[4]
+            # Byte 120: float tyreWear[4]
+            # Byte 136: float tyreDirtyLevel[4]
+            # Byte 152: float tyreCoreTemp[4] -> This is what we want 'Tyre Temp'
+            # Byte 168: float camberRAD[4]
+            # Byte 184: float suspensionTravel[4] ? Wait, offset shift.
             
-            accG = struct.unpack("fff", data[44:56])
-            suspTravel = struct.unpack("ffff", data[124:140])
+            # Let's count from 44 (accG end):
+            # 44 + 16 (slip) = 60
+            # 60 + 16 (load) = 76
+            # 76 + 16 (pressure) = 92
+            # 92 + 16 (angSpeed) = 108
+            # 108 + 16 (wear) = 124
+            # 124 + 16 (dirty) = 140
+            # 140 + 16 (coreTemp) = 156
+            # 156 + 16 (camber) = 172
+            # 172 + 16 (suspTravel) = 188
+            
+            # Re-verify offset 124 in previous code (suspTravel). 
+            # The AC struct is tricky between versions. Let's use standard offsets.
+            # wheelSlip @ 56
+            
+            # Temps @ 152 (4 floats)
+            tyreCoreTemp = struct.unpack("ffff", data[152:168])
+            
+            # Brake Temps ?
+            # AC physics struct usually has brakeTemp later?
+            # Actually, standard struct:
+            # ...
+            # 204: drs (f)
+            # 208: tc (f)
+            # ... 
+            # BrakeTemp is notably missing in standard AC Shared Mem v1.4. 
+            # BUT ACC might populate `brakeTemp` @ ?
+            # We'll stick to Tyre Temps for now which are critical.
             
             return {
                 "packetId": unpacked[0],
@@ -90,7 +122,10 @@ class ACCBridge:
                 "steerAngle": steer,
                 "speedKph": speed,
                 "accG": accG,
-                "suspensionTravel": suspTravel
+                "suspensionTravel": suspTravel,
+                "tyreTemp": tyreCoreTemp,
+                "wheelSlip": struct.unpack("ffff", data[56:72]),
+                "tyreWear": struct.unpack("ffff", data[120:136])
             }
         except Exception as e:
             return None

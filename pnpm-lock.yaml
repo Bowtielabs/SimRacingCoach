@@ -106,6 +106,32 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  packages/adapters/actc:
+    dependencies:
+      '@simracing/core':
+        specifier: workspace:*
+        version: link:../../core
+    devDependencies:
+      '@types/node':
+        specifier: ^20.19.30
+        version: 20.19.30
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/adapters/ams2:
+    dependencies:
+      '@simracing/core':
+        specifier: workspace:*
+        version: link:../../core
+    devDependencies:
+      '@types/node':
+        specifier: ^20.19.30
+        version: 20.19.30
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/ai-engine:
     dependencies:
       '@simracing/core':
