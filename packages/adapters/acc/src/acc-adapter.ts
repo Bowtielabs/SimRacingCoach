@@ -4,7 +4,10 @@ import path from 'path';
 import { TelemetryFrame } from '@simracing/core';
 import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Safe dirname for ESM/CJS dual support
+const _dirname = typeof __dirname !== 'undefined'
+    ? __dirname
+    : path.dirname(fileURLToPath(import.meta.url));
 
 export class AccAdapter {
     private socket: dgram.Socket;
@@ -40,19 +43,37 @@ export class AccAdapter {
     }
 
     private spawnBridge() {
-        // Path to python script: ../python/acc_bridge.py relative to dist/index.js (so ../../python in src terms? No)
-        // In src: ../python/acc_bridge.py
-        // In dist: ../python/acc_bridge.py (if we copy it)
-        // Let's assume we run from root or handle path carefully.
-        // For dev: packages/adapters/acc/python/acc_bridge.py
-        // We will try a known path relative to cwd or this file.
-        const scriptPath = path.resolve(__dirname, '../../python/acc_bridge.py');
-        console.log('[ACC-Adapter] Spawning bridge:', scriptPath);
+        const fs = require('fs');
+        const exeName = 'acc_bridge.exe';
 
-        this.pythonProcess = spawn('python', [scriptPath], { stdio: 'inherit' });
+        // Potential paths for the binary
+        // 1. Production (Electron resources)
+        // 2. Development (CWD/apps/desktop/resources/bin)
+        const possiblePaths = [
+            path.join(process.cwd(), 'resources/bin', exeName),
+            path.join(process.cwd(), 'apps/desktop/resources/bin', exeName),
+            path.join(path.dirname(process.execPath), 'resources/bin', exeName) // Standard Electron install
+        ];
 
-        this.pythonProcess.on('error', (err) => {
-            console.error('[ACC-Adapter] Failed to spawn python bridge:', err);
+        let executable: string | null = null;
+        for (const p of possiblePaths) {
+            if (fs.existsSync(p)) {
+                executable = p;
+                break;
+            }
+        }
+
+        if (executable) {
+            console.log('[ACC-Adapter] Spawning binary:', executable);
+            this.pythonProcess = spawn(executable, [], { stdio: 'inherit' });
+        } else {
+            const scriptPath = path.resolve(_dirname, '../../python/acc_bridge.py');
+            console.log('[ACC-Adapter] Spawning python script:', scriptPath);
+            this.pythonProcess = spawn('python', [scriptPath], { stdio: 'inherit' });
+        }
+
+        this.pythonProcess?.on('error', (err) => {
+            console.error('[ACC-Adapter] Failed to spawn bridge:', err);
         });
     }
 

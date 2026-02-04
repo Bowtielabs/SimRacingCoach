@@ -138,6 +138,7 @@ function handleAdapterFrame(message) {
             sessionTime: typeof data.session_time === 'number' ? data.session_time : undefined,
             sessionLapsRemain: typeof data.session_laps_remain === 'number' ? data.session_laps_remain : undefined,
             sessionTimeRemain: typeof data.session_time_remain === 'number' ? data.session_time_remain : undefined,
+            lapDistPct: typeof data.lap_dist_pct === 'number' ? data.lap_dist_pct : undefined,
         },
         lapTimes: {
             best: typeof data.lap_times?.best === 'number' ? data.lap_times.best : undefined,
@@ -145,6 +146,15 @@ function handleAdapterFrame(message) {
             current: typeof data.lap_times?.current === 'number' ? data.lap_times.current : undefined,
         },
         engineWarnings: typeof data.engine_warnings === 'number' ? data.engine_warnings : undefined,
+        // New mappings for ACC/Advanced Physics
+        physics: {
+            steeringAngle: typeof data.steering_rad === 'number' ? data.steering_rad : undefined,
+            lateralG: typeof data.lateral_g === 'number' ? data.lateral_g : undefined,
+            longitudinalG: typeof data.longitudinal_g === 'number' ? data.longitudinal_g : undefined,
+        },
+        suspension: data.suspension, // Passthrough if provided
+        aero: data.aero, // Passthrough if provided
+        carControls: data.carControls // Passthrough
     };
     // Send to AI service
     if (aiService && aiInitialized) {
@@ -253,18 +263,40 @@ function startAdapter(which) {
         logger.error({ which }, 'unknown adapter');
         return;
     }
-    // Determinar el path del adapter basado en el ID
-    const adapterPath = which === 'mock-iracing'
-        ? path.join(process.cwd(), '../adapters/mock-iracing/adapter.js')
-        : path.join(process.cwd(), '../adapters/iracing-node/adapter.mjs');
+    // Determine adapter path
+    let adapterPath = '';
+    // Production / Configured Path override
+    const basePath = process.env.ADAPTER_PATH
+        ? process.env.ADAPTER_PATH
+        : path.join(process.cwd(), '../adapters'); // Dev Fallback
+    const extension = process.env.ADAPTER_PATH ? '.js' : '.mjs'; // Production uses bundled JS
+    if (which === 'mock-iracing') {
+        adapterPath = path.join(basePath, `mock-iracing/adapter.js`);
+    }
+    else if (which === 'acc') {
+        adapterPath = path.join(basePath, `acc/adapter${extension}`);
+    }
+    else if (which === 'ams2') {
+        adapterPath = path.join(basePath, `ams2/adapter${extension}`);
+    }
+    else if (which === 'actc') {
+        adapterPath = path.join(basePath, `actc/adapter${extension}`);
+    }
+    else {
+        // Default to iRacing
+        adapterPath = path.join(basePath, `iracing-node/adapter${extension}`);
+    }
     // console.log(`[Service] 🔌 Starting adapter: ${which} from ${adapterPath}`);
     adapterSupervisor = new AdapterSupervisor({
         adapterId: which,
         resolveCommand: async () => ({
-            command: 'node',
+            command: process.execPath, // Use current runtime (Node or Electron)
             args: [adapterPath],
-            env: {},
-            cwd: process.cwd()
+            env: {
+                ...process.env,
+                ELECTRON_RUN_AS_NODE: '1' // Ensure Electron behaves as Node
+            },
+            cwd: path.dirname(adapterPath) // Run from adapter dir
         })
     });
     adapterSupervisor.on('status', handleAdapterStatus);
@@ -438,7 +470,7 @@ process.on('SIGINT', async () => {
 // Initialize LLM and Piper services
 (async () => {
     try {
-        const { LlamaCppAgent, PiperAgent } = await import('@simracing/ai-engine');
+        const { LlamaCppAgent, PiperAgent, PrerenderedAudioAgent } = await import('@simracing/ai-engine');
         // Start LLM (Disabled per user request - using Rules Engine only)
         /*
         console.log('[Service] Starting LLM (async)...');
@@ -448,10 +480,10 @@ process.on('SIGINT', async () => {
         */
         // console.log('[Service] ℹ️ LLM is disabled. Rules Engine will handle all coaching.');
         // Initialize Piper (keep instance alive)
-        // console.log('[Service] Starting Piper...');
-        piperAgent = new PiperAgent();
+        // console.log('[Service] Starting Prerendered Audio...');
+        piperAgent = new PrerenderedAudioAgent();
         await piperAgent.initialize();
-        console.log('[Service] ✅ Piper ready (with prerendered audio) - Sistema iniciado');
+        console.log('[Service] ✅ Audio System ready - Sistema iniciado');
         // Check if adapter is already connected and initialize AI if needed
         if (adapterStatus?.state === 'connected' && !aiService) {
             // console.log('[Service] Adapter already connected on startup - initializing AI');

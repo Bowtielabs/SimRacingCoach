@@ -11,6 +11,7 @@ export type AdapterId =
   | 'simutc'
   | 'ac'
   | 'acc'
+  | 'actc'
   | 'mock-iracing'
   | 'other';
 
@@ -32,6 +33,7 @@ export const ADAPTER_SPECS: AdapterSpec[] = [
   { id: 'simutc', label: 'SimuTC', simName: 'SimuTC' },
   { id: 'ac', label: 'Assetto Corsa', simName: 'Assetto Corsa' },
   { id: 'acc', label: 'ACC', simName: 'Assetto Corsa Competizione' },
+  { id: 'actc', label: 'ACTC', simName: 'Turismo Carretera' },
   { id: 'mock-iracing', label: 'iRacing (Mock)', simName: 'iRacing Mock' },
   { id: 'other', label: 'Other', simName: 'Other' },
 ];

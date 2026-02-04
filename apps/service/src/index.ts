@@ -189,9 +189,9 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
       lateralG: typeof data.lateral_g === 'number' ? data.lateral_g : undefined,
       longitudinalG: typeof data.longitudinal_g === 'number' ? data.longitudinal_g : undefined,
     },
-    suspension: data.suspension, // Passthrough if provided
-    aero: data.aero, // Passthrough if provided
-    carControls: data.carControls // Passthrough
+    suspension: data.suspension ?? undefined,
+    aero: data.aero ?? undefined,
+    carControls: data.carControls ?? undefined
   };
 
   // Send to AI service
@@ -315,19 +315,27 @@ function startAdapter(which: AdapterId) {
     return;
   }
 
-  // Determinar el path del adapter basado en el ID
+  // Determine adapter path
   let adapterPath = '';
+
+  // Production / Configured Path override
+  const basePath = process.env.ADAPTER_PATH
+    ? process.env.ADAPTER_PATH
+    : path.join(process.cwd(), '../adapters'); // Dev Fallback
+
+  const extension = process.env.ADAPTER_PATH ? '.js' : '.mjs'; // Production uses bundled JS
+
   if (which === 'mock-iracing') {
-    adapterPath = path.join(process.cwd(), '../adapters/mock-iracing/adapter.js');
+    adapterPath = path.join(basePath, `mock-iracing/adapter.js`);
   } else if (which === 'acc') {
-    adapterPath = path.join(process.cwd(), '../adapters/acc/adapter.mjs');
+    adapterPath = path.join(basePath, `acc/adapter${extension}`);
   } else if (which === 'ams2') {
-    adapterPath = path.join(process.cwd(), '../adapters/ams2/adapter.mjs');
+    adapterPath = path.join(basePath, `ams2/adapter${extension}`);
   } else if (which === 'actc') {
-    adapterPath = path.join(process.cwd(), '../adapters/actc/adapter.mjs');
+    adapterPath = path.join(basePath, `actc/adapter${extension}`);
   } else {
     // Default to iRacing
-    adapterPath = path.join(process.cwd(), '../adapters/iracing-node/adapter.mjs');
+    adapterPath = path.join(basePath, `iracing-node/adapter${extension}`);
   }
 
   // console.log(`[Service] 🔌 Starting adapter: ${which} from ${adapterPath}`);
@@ -335,10 +343,13 @@ function startAdapter(which: AdapterId) {
   adapterSupervisor = new AdapterSupervisor({
     adapterId: which,
     resolveCommand: async () => ({
-      command: 'node',
+      command: process.execPath, // Use current runtime (Node or Electron)
       args: [adapterPath],
-      env: {},
-      cwd: process.cwd()
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: '1' // Ensure Electron behaves as Node
+      },
+      cwd: path.dirname(adapterPath) // Run from adapter dir
     })
   });
 
@@ -538,7 +549,7 @@ process.on('SIGINT', async () => {
 // Initialize LLM and Piper services
 (async () => {
   try {
-    const { LlamaCppAgent, PiperAgent, PrerenderedAudioAgent } = await import('@simracing/ai-engine');
+    const { LlamaCppAgent, PrerenderedAudioAgent } = await import('@simracing/ai-engine');
 
     // Start LLM (Disabled per user request - using Rules Engine only)
     /*

@@ -4,7 +4,7 @@ import path from 'path';
 import { TelemetryFrame } from '@simracing/core';
 import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const _dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 
 export class ActcAdapter {
     private socket: dgram.Socket;
@@ -38,13 +38,34 @@ export class ActcAdapter {
     }
 
     private spawnBridge() {
-        const scriptPath = path.resolve(__dirname, '../../python/actc_bridge.py');
-        console.log('[ACTC-Adapter] Spawning bridge:', scriptPath);
+        const fs = require('fs');
+        const exeName = 'actc_bridge.exe';
 
-        this.pythonProcess = spawn('python', [scriptPath], { stdio: 'inherit' });
+        const possiblePaths = [
+            path.join(process.cwd(), 'resources/bin', exeName),
+            path.join(process.cwd(), 'apps/desktop/resources/bin', exeName),
+            path.join(path.dirname(process.execPath), 'resources/bin', exeName)
+        ];
 
-        this.pythonProcess.on('error', (err) => {
-            console.error('[ACTC-Adapter] Failed to spawn python bridge:', err);
+        let executable: string | null = null;
+        for (const p of possiblePaths) {
+            if (fs.existsSync(p)) {
+                executable = p;
+                break;
+            }
+        }
+
+        if (executable) {
+            console.log('[ACTC-Adapter] Spawning binary:', executable);
+            this.pythonProcess = spawn(executable, [], { stdio: 'inherit' });
+        } else {
+            const scriptPath = path.resolve(_dirname, '../../python/actc_bridge.py');
+            console.log('[ACTC-Adapter] Spawning python script:', scriptPath);
+            this.pythonProcess = spawn('python', [scriptPath], { stdio: 'inherit' });
+        }
+
+        this.pythonProcess?.on('error', (err) => {
+            console.error('[ACTC-Adapter] Failed to spawn bridge:', err);
         });
     }
 

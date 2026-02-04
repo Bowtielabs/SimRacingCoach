@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-export type AdapterId = 'iracing' | 'ams2' | 'raceroom' | 'rfactor' | 'rfactor2' | 'automobilista' | 'simutc' | 'ac' | 'acc' | 'mock-iracing' | 'other';
+export type AdapterId = 'iracing' | 'ams2' | 'raceroom' | 'rfactor' | 'rfactor2' | 'automobilista' | 'simutc' | 'ac' | 'acc' | 'actc' | 'mock-iracing' | 'other';
 export type AdapterStatusState = 'waiting' | 'connected' | 'disconnected' | 'error';
 export interface AdapterSpec {
     id: AdapterId;

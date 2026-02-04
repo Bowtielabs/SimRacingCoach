@@ -1,6 +1,6 @@
 appId: com.simracing.coach
 productName: SimRacing Coach
-asar: false
+asar: true
 directories:
   output: dist
   buildResources: build
@@ -12,9 +12,11 @@ files:
 extraResources:
   - from: resources
     to: .
+  - from: apps/desktop/resources
+    to: resources
 win:
   target:
-    - target: dir
+    - target: nsis
       arch:
         - x64
   icon: build/icon.ico

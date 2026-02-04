@@ -4,7 +4,7 @@ import path from 'path';
 import { TelemetryFrame } from '@simracing/core';
 import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const _dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 
 export class Ams2Adapter {
     private socket: dgram.Socket;
@@ -40,13 +40,34 @@ export class Ams2Adapter {
     }
 
     private spawnBridge() {
-        const scriptPath = path.resolve(__dirname, '../../python/ams2_bridge.py');
-        console.log('[AMS2-Adapter] Spawning bridge:', scriptPath);
+        const fs = require('fs');
+        const exeName = 'ams2_bridge.exe';
 
-        this.pythonProcess = spawn('python', [scriptPath], { stdio: 'inherit' });
+        const possiblePaths = [
+            path.join(process.cwd(), 'resources/bin', exeName),
+            path.join(process.cwd(), 'apps/desktop/resources/bin', exeName),
+            path.join(path.dirname(process.execPath), 'resources/bin', exeName)
+        ];
 
-        this.pythonProcess.on('error', (err) => {
-            console.error('[AMS2-Adapter] Failed to spawn python bridge:', err);
+        let executable: string | null = null;
+        for (const p of possiblePaths) {
+            if (fs.existsSync(p)) {
+                executable = p;
+                break;
+            }
+        }
+
+        if (executable) {
+            console.log('[AMS2-Adapter] Spawning binary:', executable);
+            this.pythonProcess = spawn(executable, [], { stdio: 'inherit' });
+        } else {
+            const scriptPath = path.resolve(_dirname, '../../python/ams2_bridge.py');
+            console.log('[AMS2-Adapter] Spawning python script:', scriptPath);
+            this.pythonProcess = spawn('python', [scriptPath], { stdio: 'inherit' });
+        }
+
+        this.pythonProcess?.on('error', (err) => {
+            console.error('[AMS2-Adapter] Failed to spawn bridge:', err);
         });
     }
 
