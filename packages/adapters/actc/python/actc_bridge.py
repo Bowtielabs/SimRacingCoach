@@ -43,7 +43,7 @@ class ACTCBridge:
         for name in names:
             try:
                 self.mm = mmap.mmap(0, 2048, name) # Size is usually small for rF1 plugins
-                print(f"[ACTC-Bridge] Connected to Shared Memory ({name})!")
+                print(f"[ACTC-Bridge] Connected to Shared Memory ({name})!", flush=True)
                 return True
             except:
                 pass
@@ -52,109 +52,41 @@ class ACTCBridge:
     def read_telemetry(self):
         if not self.mm: return None
         self.mm.seek(0)
-        
-        # NOTE: This layout matches the popular rF1 Shared Memory Map 
-        # (Often used by SimHub for rF1/AMS1/GTR2)
-        #
-        # Offset 0: Data
-        # We need to scan or use known offsets.
-        #
-        # Let's assume the Internals Plugin layout v2/v3
-        
-        data = self.mm.read(2048)
-        
-        try:
-            # Trying to read basic float blocks
-            # rF1 internals are often just a dump of the Telemetry struct.
-            
-            # Let's try searching for RPM/Speed if we can't be sure.
-            # But let's assume a standard layout provided by SimHub's bridge for rF1.
-            # Actually, SimRacingCoach should ideally have its OWN dll, but we are Python-only client.
-            
-            # Fallback: Assume rF1 Shared Memory Map (The one most sims use)
-            # 
-            # Phase 9 Goal: Basic functional telemetry.
-            #
-            # Attempting to map standard rF1 Internals struct:
-            # 0: DeltaTime (f)
-            # 4: LapNumber (i)
-            # ...
-            # Speed often @ start? No.
-            
-            # Alternative: Use "Otterhud" or "Gihub rfactor-shared-memory" layout.
-            # 
-            # Layout:
-            # 0: mVersion
-            # ...
-            # 68: mSpeed (float m/s)
-            # 72: mRPM (float)
-            # 76: mMaxRPM (float)
-            # 80: mGear (int)
-            # ...
-            # 84: mEngineWaterTemp (float)
-            # 88: mEngineOilTemp (float)
-            # ...
-            # 100: mThrottle (float 0-1)
-            # 104: mBrake (float 0-1)
-            # 108: mClutch (float 0-1)
-            # 112: mSteering (float radians)
-            # ...
-            # 128: mLocalAccel[3] (float) -> G-Forces
-            # ...
-            # 204: mWheelRpm[4]
-            # ...
-            #
-            # This looks like a reasonable standard for many rF1 Plugins.
-            
-            speed = struct.unpack("f", data[68:72])[0]
-            rpm = struct.unpack("f", data[72:76])[0]
-            gear = struct.unpack("i", data[80:84])[0]
-            
-            throttle = struct.unpack("f", data[100:104])[0]
-            brake = struct.unpack("f", data[104:108])[0]
-            
-            water = struct.unpack("f", data[84:88])[0]
-            oil = struct.unpack("f", data[88:92])[0]
-            
-            steer = struct.unpack("f", data[112:116])[0]
-            
-            g_forces = struct.unpack("fff", data[128:140])
-            
-            # Additional Rfactor1 common offsets
-            # mLapStartDist ??
-            # mLapDist (float) @ ~16 (offset variable, but let's try standard)
-            # Actually, standard RF1 plugin structure is:
-            # 0: DeltaTime
-            # ...
-            # 20: LapDist (float) ?
-            
-            # Let's emit what we have and add placeholders for critical track data
-            # Ideally we'd scan for these.
-            
-            return {
-                "t": time.time() * 1000,
-                "speed": speed,
-                "rpm": rpm,
-                "gear": gear,
-                "throttle": throttle,
-                "brake": brake,
-                "clutch": 0,
-                "steer": steer,
-                "waterTemp": water,
-                "oilTemp": oil,
-                "lateralG": g_forces[0], 
-                "longitudinalG": g_forces[2],
-                "tyreTemp": [0,0,0,0], # Needs finding offset
-                "suspensionTravel": [0,0,0,0],
-                "lapDist": 0.0, # Placeholder
-                "sector": 0     # Placeholder
-            }
+        data = self.mm.read(512) # Read first 512 bytes
 
-        except Exception as e:
-            return None
+        # Heuristic Scanner
+        # We look for RPM (usually > 800 and < 10000) and Speed (0-100 m/s)
+        
+        floats = []
+        try:
+            # Unpack first 64 floats (256 bytes)
+            floats = struct.unpack("64f", data[:256])
+        except:
+            pass
+            
+        # Debug: Print potential candidates
+        if time.time() % 1.0 < 0.1:
+            candidates = []
+            for i, val in enumerate(floats):
+                if 100 < val < 10000: # Potential RPM
+                    candidates.append(f"Offset {i*4}: {val:.0f} (RPM?)")
+                if 0.1 < val < 100:   # Potential Speed m/s (approx 1-360 kph)
+                    candidates.append(f"Offset {i*4}: {val:.1f} (Speed?)")
+            
+            if candidates:
+                print(f"[ACTC-Bridge] SCANNER: {', '.join(candidates[:5])}", flush=True)
+
+        # Return dummy data for now
+        return {
+            "t": time.time() * 1000,
+            "speed": 0, "rpm": 0, "gear": 0, "throttle": 0, "brake": 0,
+            "clutch": 0, "steer": 0, "waterTemp": 0, "oilTemp": 0,
+            "lateralG": 0, "longitudinalG": 0, "tyreTemp": [0,0,0,0],
+            "suspensionTravel": [0,0,0,0], "lapDist": 0.0, "sector": 0
+        }
 
     def loop(self):
-        print("[ACTC-Bridge] Waiting for ACTC/rFactor1...")
+        print("[ACTC-Bridge] Waiting for ACTC/rFactor1...", flush=True)
         while True:
             if not self.mm:
                 if self.connect():
@@ -171,7 +103,7 @@ class ACTCBridge:
                     payload = json.dumps(telem).encode('utf-8')
                     self.sock.sendto(payload, (self.host, self.port))
             except Exception as e:
-                print(f"[ACTC-Bridge] Error: {e}")
+                print(f"[ACTC-Bridge] Error: {e}", flush=True)
                 if self.mm: self.mm.close()
                 self.mm = None
             

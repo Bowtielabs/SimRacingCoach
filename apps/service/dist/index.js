@@ -138,6 +138,7 @@ function handleAdapterFrame(message) {
             sessionTime: typeof data.session_time === 'number' ? data.session_time : undefined,
             sessionLapsRemain: typeof data.session_laps_remain === 'number' ? data.session_laps_remain : undefined,
             sessionTimeRemain: typeof data.session_time_remain === 'number' ? data.session_time_remain : undefined,
+            lapDistPct: typeof data.lap_dist_pct === 'number' ? data.lap_dist_pct : undefined,
         },
         lapTimes: {
             best: typeof data.lap_times?.best === 'number' ? data.lap_times.best : undefined,
@@ -145,6 +146,15 @@ function handleAdapterFrame(message) {
             current: typeof data.lap_times?.current === 'number' ? data.lap_times.current : undefined,
         },
         engineWarnings: typeof data.engine_warnings === 'number' ? data.engine_warnings : undefined,
+        // New mappings for ACC/Advanced Physics
+        physics: {
+            steeringAngle: typeof data.steering_rad === 'number' ? data.steering_rad : undefined,
+            lateralG: typeof data.lateral_g === 'number' ? data.lateral_g : undefined,
+            longitudinalG: typeof data.longitudinal_g === 'number' ? data.longitudinal_g : undefined,
+        },
+        suspension: data.suspension || undefined, // Passthrough if provided
+        aero: data.aero || undefined, // Passthrough if provided
+        carControls: data.carControls || undefined // Passthrough
     };
     // Send to AI service
     if (aiService && aiInitialized) {
@@ -254,9 +264,23 @@ function startAdapter(which) {
         return;
     }
     // Determinar el path del adapter basado en el ID
-    const adapterPath = which === 'mock-iracing'
-        ? path.join(process.cwd(), '../adapters/mock-iracing/adapter.js')
-        : path.join(process.cwd(), '../adapters/iracing-node/adapter.mjs');
+    let adapterPath = '';
+    if (which === 'mock-iracing') {
+        adapterPath = path.join(process.cwd(), '../adapters/mock-iracing/adapter.js');
+    }
+    else if (which === 'acc') {
+        adapterPath = path.join(process.cwd(), '../adapters/acc/adapter.mjs');
+    }
+    else if (which === 'ams2') {
+        adapterPath = path.join(process.cwd(), '../adapters/ams2/adapter.mjs');
+    }
+    else if (which === 'actc') {
+        adapterPath = path.join(process.cwd(), '../adapters/actc/adapter.mjs');
+    }
+    else {
+        // Default to iRacing
+        adapterPath = path.join(process.cwd(), '../adapters/iracing-node/adapter.mjs');
+    }
     // console.log(`[Service] 🔌 Starting adapter: ${which} from ${adapterPath}`);
     adapterSupervisor = new AdapterSupervisor({
         adapterId: which,
@@ -438,7 +462,7 @@ process.on('SIGINT', async () => {
 // Initialize LLM and Piper services
 (async () => {
     try {
-        const { LlamaCppAgent, PiperAgent } = await import('@simracing/ai-engine');
+        const { LlamaCppAgent, PrerenderedAudioAgent } = await import('@simracing/ai-engine');
         // Start LLM (Disabled per user request - using Rules Engine only)
         /*
         console.log('[Service] Starting LLM (async)...');
@@ -448,10 +472,10 @@ process.on('SIGINT', async () => {
         */
         // console.log('[Service] ℹ️ LLM is disabled. Rules Engine will handle all coaching.');
         // Initialize Piper (keep instance alive)
-        // console.log('[Service] Starting Piper...');
-        piperAgent = new PiperAgent();
+        // console.log('[Service] Starting Prerendered Audio...');
+        piperAgent = new PrerenderedAudioAgent();
         await piperAgent.initialize();
-        console.log('[Service] ✅ Piper ready (with prerendered audio) - Sistema iniciado');
+        console.log('[Service] ✅ Audio System ready - Sistema iniciado');
         // Check if adapter is already connected and initialize AI if needed
         if (adapterStatus?.state === 'connected' && !aiService) {
             // console.log('[Service] Adapter already connected on startup - initializing AI');

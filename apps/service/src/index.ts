@@ -189,9 +189,9 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
       lateralG: typeof data.lateral_g === 'number' ? data.lateral_g : undefined,
       longitudinalG: typeof data.longitudinal_g === 'number' ? data.longitudinal_g : undefined,
     },
-    suspension: data.suspension, // Passthrough if provided
-    aero: data.aero, // Passthrough if provided
-    carControls: data.carControls // Passthrough
+    suspension: data.suspension || undefined, // Passthrough if provided
+    aero: data.aero || undefined, // Passthrough if provided
+    carControls: data.carControls || undefined // Passthrough
   };
 
   // Send to AI service
@@ -323,7 +323,7 @@ function startAdapter(which: AdapterId) {
     adapterPath = path.join(process.cwd(), '../adapters/acc/adapter.mjs');
   } else if (which === 'ams2') {
     adapterPath = path.join(process.cwd(), '../adapters/ams2/adapter.mjs');
-  } else if (which === 'actc') {
+  } else if ((which as any) === 'actc') {
     adapterPath = path.join(process.cwd(), '../adapters/actc/adapter.mjs');
   } else {
     // Default to iRacing
@@ -538,7 +538,7 @@ process.on('SIGINT', async () => {
 // Initialize LLM and Piper services
 (async () => {
   try {
-    const { LlamaCppAgent, PiperAgent, PrerenderedAudioAgent } = await import('@simracing/ai-engine');
+    const { LlamaCppAgent, PrerenderedAudioAgent } = await import('@simracing/ai-engine');
 
     // Start LLM (Disabled per user request - using Rules Engine only)
     /*

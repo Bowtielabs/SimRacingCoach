@@ -38,7 +38,8 @@ export class ActcAdapter {
     }
 
     private spawnBridge() {
-        const scriptPath = path.resolve(__dirname, '../../python/actc_bridge.py');
+        // Assume built to dist/index.js, so __dirname is .../dist
+        const scriptPath = path.resolve(__dirname, '../python/actc_bridge.py');
         console.log('[ACTC-Adapter] Spawning bridge:', scriptPath);
 
         this.pythonProcess = spawn('python', [scriptPath], { stdio: 'inherit' });

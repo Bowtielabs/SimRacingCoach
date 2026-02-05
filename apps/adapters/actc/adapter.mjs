@@ -15,7 +15,14 @@ emit({ type: 'status', state: 'waiting', sim, details: 'Waiting for connection..
 
 const adapter = new ActcAdapter(9302);
 
+let connected = false;
+
 adapter.start((frame) => {
+    if (!connected) {
+        connected = true;
+        emit({ type: 'status', state: 'connected', sim, details: 'Connected to Simulador Turismo Carretera' });
+        log('First frame received - Connected!');
+    }
     // Reverse mapping for Service (Legacy)
     const data = {
         speed_mps: (frame.powertrain?.speedKph || 0) / 3.6,
