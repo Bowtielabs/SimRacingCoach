@@ -16,7 +16,7 @@
     "format": "echo 'no format configured'"
   },
   "dependencies": {
-    "irsdk-node": "^2.0.0",
+    "irsdk-node": "^4.3.0",
     "@simracing/core": "workspace:*"
   },
   "devDependencies": {

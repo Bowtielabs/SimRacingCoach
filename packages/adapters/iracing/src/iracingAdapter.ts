@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { CapabilityMap, TelemetryFrame } from '../../../packages/core/src/types.js';
+import type { CapabilityMap, TelemetryFrame } from '@simracing/core';
 
 
 // Importar irsdk-node dinámicamente para evitar errores si no está disponible
@@ -218,8 +218,6 @@ export class IracingAdapter extends EventEmitter {
       // Traffic awareness
       traffic: {
         carLeftRight: this.getVar('CarLeftRight'),
-        carAhead: this.getVar('CarDistAhead'),
-        carBehind: this.getVar('CarDistBehind'),
       },
 
       // Session flags
@@ -235,10 +233,6 @@ export class IracingAdapter extends EventEmitter {
         throttle: this.getVar('Throttle'),
         brake: this.getVar('Brake'),
         clutch: this.getVar('Clutch'),
-        shiftLightFirstRpm: this.getVar('PlayerCarSLFirstRPM'),
-        shiftLightShiftRpm: this.getVar('PlayerCarSLShiftRPM'),
-        shiftLightLastRpm: this.getVar('PlayerCarSLLastRPM'),
-        shiftLightBlinkRpm: this.getVar('PlayerCarSLBlinkRPM'),
       },
 
       // Temperatures
@@ -249,39 +243,18 @@ export class IracingAdapter extends EventEmitter {
         airC: this.getVar('AirTemp'),
         // Tyre temps - promedio de izquierda, centro, derecha para cada rueda
         tyreC: [
-          this.avgTemp('LFtempCL', 'LFtempCM', 'LFtempCR'),
-          this.avgTemp('RFtempCL', 'RFtempCM', 'RFtempCR'),
-          this.avgTemp('LRtempCL', 'LRtempCM', 'LRtempCR'),
-          this.avgTemp('RRtempCL', 'RRtempCM', 'RRtempCR'),
+          (this.avgTemp('LFtempCL', 'LFtempCM', 'LFtempCR') ?? 0),
+          (this.avgTemp('RFtempCL', 'RFtempCM', 'RFtempCR') ?? 0),
+          (this.avgTemp('LRtempCL', 'LRtempCM', 'LRtempCR') ?? 0),
+          (this.avgTemp('RRtempCL', 'RRtempCM', 'RRtempCR') ?? 0),
         ],
-        // Tyre temps detallados (left, middle, right de cada rueda)
-        tyreTempLF: [this.getVar('LFtempCL'), this.getVar('LFtempCM'), this.getVar('LFtempCR')],
-        tyreTempRF: [this.getVar('RFtempCL'), this.getVar('RFtempCM'), this.getVar('RFtempCR')],
-        tyreTempLR: [this.getVar('LRtempCL'), this.getVar('LRtempCM'), this.getVar('LRtempCR')],
-        tyreTempRR: [this.getVar('RRtempCL'), this.getVar('RRtempCM'), this.getVar('RRtempCR')],
         // Brake line pressure (bar) - representa calor indirecto
         brakeC: [
-          this.getVar('LFbrakeLinePress'),
-          this.getVar('RFbrakeLinePress'),
-          this.getVar('LRbrakeLinePress'),
-          this.getVar('RRbrakeLinePress'),
+          (this.getVar('LFbrakeLinePress') ?? 0),
+          (this.getVar('RFbrakeLinePress') ?? 0),
+          (this.getVar('LRbrakeLinePress') ?? 0),
+          (this.getVar('RRbrakeLinePress') ?? 0),
         ],
-      },
-
-      // Tyre wear (0-100% remaining)
-      tyreWear: {
-        LF: [this.getVar('LFwearL'), this.getVar('LFwearM'), this.getVar('LFwearR')],
-        RF: [this.getVar('RFwearL'), this.getVar('RFwearM'), this.getVar('RFwearR')],
-        LR: [this.getVar('LRwearL'), this.getVar('LRwearM'), this.getVar('LRwearR')],
-        RR: [this.getVar('RRwearL'), this.getVar('RRwearM'), this.getVar('RRwearR')],
-      },
-
-      // Tyre cold pressure (kPa)
-      tyrePressure: {
-        LF: this.getVar('LFcoldPressure'),
-        RF: this.getVar('RFcoldPressure'),
-        LR: this.getVar('LRcoldPressure'),
-        RR: this.getVar('RRcoldPressure'),
       },
 
       // Fuel
@@ -289,25 +262,13 @@ export class IracingAdapter extends EventEmitter {
         level: this.getVar('FuelLevel'),           // Liters remaining
         levelPct: this.getVar('FuelLevelPct'),     // Percent remaining (0-1)
         usePerHour: this.getVar('FuelUsePerHour'), // kg/h consumption
-        pressure: this.getVar('FuelPress'),        // bar
       },
 
       // Physics / dynamics
       physics: {
         steeringAngle: this.getVar('SteeringWheelAngle'),  // radians
-        steeringAngleMax: this.getVar('SteeringWheelAngleMax'),
         lateralG: this.getVar('LatAccel'),         // m/s^2
         longitudinalG: this.getVar('LongAccel'),   // m/s^2
-        verticalG: this.getVar('VertAccel'),       // m/s^2
-        yaw: this.getVar('Yaw'),                   // radians
-        pitch: this.getVar('Pitch'),               // radians
-        roll: this.getVar('Roll'),                 // radians
-        yawRate: this.getVar('YawRate'),           // rad/s
-        pitchRate: this.getVar('PitchRate'),       // rad/s
-        rollRate: this.getVar('RollRate'),         // rad/s
-        velocityX: this.getVar('VelocityX'),       // m/s
-        velocityY: this.getVar('VelocityY'),       // m/s
-        velocityZ: this.getVar('VelocityZ'),       // m/s
       },
 
       // Session info
@@ -316,17 +277,12 @@ export class IracingAdapter extends EventEmitter {
         inGarage: this.getVar('IsInGarage'),
         isOnTrack: this.getVar('IsOnTrack'),
         incidents: this.getVar('PlayerCarMyIncidentCount'),
-        teamIncidents: this.getVar('PlayerCarTeamIncidentCount'),
         lap: this.getVar('Lap'),
         lapsCompleted: this.getVar('LapCompleted'),
         lapDistPct: this.getVar('LapDistPct'),     // % around lap
-        lapDist: this.getVar('LapDist'),           // meters from S/F
         sessionTime: this.getVar('SessionTime'),
         sessionTimeRemain: this.getVar('SessionTimeRemain'),
         sessionLapsRemain: this.getVar('SessionLapsRemainEx'),
-        sessionState: this.getVar('SessionState'),
-        pitstopActive: this.getVar('PitstopActive'),
-        pitRepairLeft: this.getVar('PitRepairLeft'),
       },
 
       // Lap times
@@ -334,359 +290,48 @@ export class IracingAdapter extends EventEmitter {
         best: this.getVar('LapBestLapTime'),
         last: this.getVar('LapLastLapTime'),
         current: this.getVar('LapCurrentLapTime'),
-        deltaToBest: this.getVar('LapDeltaToBestLap'),
-        deltaToOptimal: this.getVar('LapDeltaToOptimalLap'),
-        deltaToSessionBest: this.getVar('LapDeltaToSessionBestLap'),
-        bestLapNum: this.getVar('LapBestLap'),
-      },
-
-      // Weather
-      weather: {
-        trackTemp: this.getVar('TrackTempCrew'),
-        airTemp: this.getVar('AirTemp'),
-        trackWetness: this.getVar('TrackWetness'),
-        precipitation: this.getVar('Precipitation'),
-        humidity: this.getVar('RelativeHumidity'),
-        windSpeed: (this.getVar('WindVel') ?? 0) * 3.6, // m/s to km/h
-        windDir: this.getVar('WindDir'),           // radians
-        skies: this.getVar('Skies'),               // 0=clear, 1=partial, 2=mostly, 3=overcast
-        fogLevel: this.getVar('FogLevel'),
-        declaredWet: this.getVar('WeatherDeclaredWet'),
       },
 
       // Car controls / settings
       carControls: {
-        brakeBias: this.getVar('dcBrakeBias'),
+        bias: this.getVar('dcBrakeBias'),
         absLevel: this.getVar('dcABS'),
         tcLevel: this.getVar('dcTractionControl'),
         absActive: this.getVar('BrakeABSactive'),
       },
 
-      // Engine
-      engine: {
-        oilTemp: this.getVar('OilTemp'),
-        oilPressure: this.getVar('OilPress'),
-        oilLevel: this.getVar('OilLevel'),
-        waterTemp: this.getVar('WaterTemp'),
-        waterLevel: this.getVar('WaterLevel'),
-        voltage: this.getVar('Voltage'),
-        manifoldPressure: this.getVar('ManifoldPress'),
-      },
+      engineWarnings: this.getVar('EngineWarnings'),
 
       // Suspension & Aero (Phase 5)
       suspension: {
         rideHeight: [
-          this.getVar('LFrideHeight'),
-          this.getVar('RFrideHeight'),
-          this.getVar('LRrideHeight'),
-          this.getVar('RRrideHeight')
+          (this.getVar('LFrideHeight') ?? 0),
+          (this.getVar('RFrideHeight') ?? 0),
+          (this.getVar('LRrideHeight') ?? 0),
+          (this.getVar('RRrideHeight') ?? 0)
         ],
         shockDeflection: [
-          this.getVar('LFshockDefl'),
-          this.getVar('RFshockDefl'),
-          this.getVar('LRshockDefl'),
-          this.getVar('RRshockDefl')
+          (this.getVar('LFshockDefl') ?? 0),
+          (this.getVar('RFshockDefl') ?? 0),
+          (this.getVar('LRshockDefl') ?? 0),
+          (this.getVar('RRshockDefl') ?? 0)
         ],
         shockVelocity: [
-          this.getVar('LFshockVel'),
-          this.getVar('RFshockVel'),
-          this.getVar('LRshockVel'),
-          this.getVar('RRshockVel')
+          (this.getVar('LFshockVel') ?? 0),
+          (this.getVar('RFshockVel') ?? 0),
+          (this.getVar('LRshockVel') ?? 0),
+          (this.getVar('RRshockVel') ?? 0)
         ],
       },
 
       aero: {
         frontRideHeight: this.avgTemp('LFrideHeight', 'LFrideHeight', 'RFrideHeight'), // Avg Front using existing helper hack
         rearRideHeight: this.avgTemp('LRrideHeight', 'LRrideHeight', 'RRrideHeight'), // Avg Rear
-        // Rake calculated on the fly or by rules engine. Here we just map raw values.
-        // We can pre-calculate rake if helpful, but let's stick to raw data mapping.
       },
 
-      engineWarnings: this.getVar('EngineWarnings'),
-
-      // Tire compound
-      tireCompound: this.getVar('PlayerTireCompound'),
-
-      // Raw inputs (pre-processing)
-      rawInputs: {
-        throttle: this.getVar('ThrottleRaw'),
-        brake: this.getVar('BrakeRaw'),
-        clutch: this.getVar('ClutchRaw'),
-        handbrake: this.getVar('HandbrakeRaw'),
-      },
-
-      // Pit service configuration
-      pitService: {
-        flags: this.getVar('PitSvFlags'),
-        fuelAdd: this.getVar('PitSvFuel'),
-        tireCompound: this.getVar('PitSvTireCompound'),
-        lfPressure: this.getVar('PitSvLFP'),
-        rfPressure: this.getVar('PitSvRFP'),
-        lrPressure: this.getVar('PitSvLRP'),
-        rrPressure: this.getVar('PitSvRRP'),
-        fastRepairUsed: this.getVar('FastRepairUsed'),
-        fastRepairAvailable: this.getVar('FastRepairAvailable'),
-        pitOptRepairLeft: this.getVar('PitOptRepairLeft'),
-      },
-
-      // Tire odometer (distance traveled per tire)
-      tyreOdometer: {
-        LF: this.getVar('LFodometer'),
-        RF: this.getVar('RFodometer'),
-        LR: this.getVar('LRodometer'),
-        RR: this.getVar('RRodometer'),
-      },
-
-      // Tire sets usage
-      tireSets: {
-        lfUsed: this.getVar('LFTiresUsed'),
-        rfUsed: this.getVar('RFTiresUsed'),
-        lrUsed: this.getVar('LRTiresUsed'),
-        rrUsed: this.getVar('RRTiresUsed'),
-        lfAvailable: this.getVar('LFTiresAvailable'),
-        rfAvailable: this.getVar('RFTiresAvailable'),
-        lrAvailable: this.getVar('LRTiresAvailable'),
-        rrAvailable: this.getVar('RRTiresAvailable'),
-        setsUsed: this.getVar('TireSetsUsed'),
-        setsAvailable: this.getVar('TireSetsAvailable'),
-      },
-
-      // Force feedback
-      ffb: {
-        torque: this.getVar('SteeringWheelTorque'),
-        pctTorque: this.getVar('SteeringWheelPctTorque'),
-        pctIntensity: this.getVar('SteeringWheelPctIntensity'),
-        pctSmoothing: this.getVar('SteeringWheelPctSmoothing'),
-        pctDamper: this.getVar('SteeringWheelPctDamper'),
-        limiter: this.getVar('SteeringWheelLimiter'),
-        maxForceNm: this.getVar('SteeringWheelMaxForceNm'),
-        peakForceNm: this.getVar('SteeringWheelPeakForceNm'),
-        enabled: this.getVar('SteeringFFBEnabled'),
-      },
-
-      // Shift light and gear shifting
-      shifting: {
-        shiftIndicatorPct: this.getVar('ShiftIndicatorPct'),
-        shiftPowerPct: this.getVar('ShiftPowerPct'),
-        shiftGrindRPM: this.getVar('ShiftGrindRPM'),
-      },
-
-      // Rumble strip contact
-      rumbleStrip: {
-        LF: this.getVar('TireLF_RumblePitch'),
-        RF: this.getVar('TireRF_RumblePitch'),
-        LR: this.getVar('TireLR_RumblePitch'),
-        RR: this.getVar('TireRR_RumblePitch'),
-      },
-
-      // Push to pass / DRS
       p2p: {
         status: this.getVar('P2P_Status'),
         count: this.getVar('P2P_Count'),
-      },
-
-      // Camera
-      camera: {
-        carIdx: this.getVar('CamCarIdx'),
-        cameraNumber: this.getVar('CamCameraNumber'),
-        groupNumber: this.getVar('CamGroupNumber'),
-        state: this.getVar('CamCameraState'),
-      },
-
-      // Replay
-      replay: {
-        playing: this.getVar('IsReplayPlaying'),
-        frameNum: this.getVar('ReplayFrameNum'),
-        frameNumEnd: this.getVar('ReplayFrameNumEnd'),
-        playSpeed: this.getVar('ReplayPlaySpeed'),
-        slowMotion: this.getVar('ReplayPlaySlowMotion'),
-        sessionTime: this.getVar('ReplaySessionTime'),
-        sessionNum: this.getVar('ReplaySessionNum'),
-      },
-
-      // System performance
-      systemPerf: {
-        frameRate: this.getVar('FrameRate'),
-        cpuUsageFG: this.getVar('CpuUsageFG'),
-        cpuUsageBG: this.getVar('CpuUsageBG'),
-        gpuUsage: this.getVar('GpuUsage'),
-        diskLoggingEnabled: this.getVar('IsDiskLoggingEnabled'),
-        diskLoggingActive: this.getVar('IsDiskLoggingActive'),
-      },
-
-      // Network
-      network: {
-        latency: this.getVar('ChanLatency'),
-        avgLatency: this.getVar('ChanAvgLatency'),
-        quality: this.getVar('ChanQuality'),
-        partnerQuality: this.getVar('ChanPartnerQuality'),
-        clockSkew: this.getVar('ChanClockSkew'),
-      },
-
-      // Session extended
-      sessionExt: {
-        sessionNum: this.getVar('SessionNum'),
-        sessionUniqueID: this.getVar('SessionUniqueID'),
-        sessionTick: this.getVar('SessionTick'),
-        sessionTimeTotal: this.getVar('SessionTimeTotal'),
-        sessionLapsTotal: this.getVar('SessionLapsTotal'),
-        sessionTimeOfDay: this.getVar('SessionTimeOfDay'),
-        paceMode: this.getVar('PaceMode'),
-        pitsOpen: this.getVar('PitsOpen'),
-        isOnTrackCar: this.getVar('IsOnTrackCar'),
-        isGarageVisible: this.getVar('IsGarageVisible'),
-        displayUnits: this.getVar('DisplayUnits'),
-        playerIncidents: this.getVar('PlayerIncidents'),
-      },
-
-      // Player car extended
-      playerCarExt: {
-        class: this.getVar('PlayerCarClass'),
-        trackSurface: this.getVar('PlayerTrackSurface'),
-        trackSurfaceMaterial: this.getVar('PlayerTrackSurfaceMaterial'),
-        weightPenalty: this.getVar('PlayerCarWeightPenalty'),
-        powerAdjust: this.getVar('PlayerCarPowerAdjust'),
-        dryTireSetLimit: this.getVar('PlayerCarDryTireSetLimit'),
-        towTime: this.getVar('PlayerCarTowTime'),
-        inPitStall: this.getVar('PlayerCarInPitStall'),
-        pitSvStatus: this.getVar('PlayerCarPitSvStatus'),
-        driverIncidentCount: this.getVar('PlayerCarDriverIncidentCount'),
-        fastRepairsUsed: this.getVar('PlayerFastRepairsUsed'),
-      },
-
-      // All delta lap times
-      lapDeltas: {
-        deltaToBest: this.getVar('LapDeltaToBestLap'),
-        deltaToBestOK: this.getVar('LapDeltaToBestLap_OK'),
-        deltaToBestDD: this.getVar('LapDeltaToBestLap_DD'),
-        deltaToOptimal: this.getVar('LapDeltaToOptimalLap'),
-        deltaToOptimalOK: this.getVar('LapDeltaToOptimalLap_OK'),
-        deltaToSessionBest: this.getVar('LapDeltaToSessionBestLap'),
-        deltaToSessionBestOK: this.getVar('LapDeltaToSessionBestLap_OK'),
-        deltaToSessionOptimal: this.getVar('LapDeltaToSessionOptimalLap'),
-        deltaToSessionOptimalOK: this.getVar('LapDeltaToSessionOptimalLap_OK'),
-        deltaToSessionLast: this.getVar('LapDeltaToSessionLastlLap'),
-        deltaToSessionLastOK: this.getVar('LapDeltaToSessionLastlLap_OK'),
-        lastNLapTime: this.getVar('LapLastNLapTime'),
-        bestNLapTime: this.getVar('LapBestNLapTime'),
-        bestNLapLap: this.getVar('LapBestNLapLap'),
-        lastNLapSeq: this.getVar('LapLasNLapSeq'),
-        raceLaps: this.getVar('RaceLaps'),
-      },
-
-      // In-car adjustments
-      inCarAdjustments: {
-        dashPage: this.getVar('dcDashPage'),
-        powerSteering: this.getVar('dcPowerSteering'),
-        throttleShape: this.getVar('dcThrottleShape'),
-        starter: this.getVar('dcStarter'),
-        pitSpeedLimiter: this.getVar('dcPitSpeedLimiterToggle'),
-        tcToggle: this.getVar('dcTractionControlToggle'),
-        headlightFlash: this.getVar('dcHeadlightFlash'),
-        lowFuelAccept: this.getVar('dcLowFuelAccept'),
-        windshieldWipers: this.getVar('dcToggleWindshieldWipers'),
-      },
-
-      // Pitstop requests
-      pitRequests: {
-        rfTireChange: this.getVar('dpRFTireChange'),
-        lfTireChange: this.getVar('dpLFTireChange'),
-        rrTireChange: this.getVar('dpRRTireChange'),
-        lrTireChange: this.getVar('dpLRTireChange'),
-        fuelFill: this.getVar('dpFuelFill'),
-        fuelAutoFillEnabled: this.getVar('dpFuelAutoFillEnabled'),
-        fuelAutoFillActive: this.getVar('dpFuelAutoFillActive'),
-        windshieldTearoff: this.getVar('dpWindshieldTearoff'),
-        fuelAddKg: this.getVar('dpFuelAddKg'),
-        fastRepair: this.getVar('dpFastRepair'),
-        lfTireColdPress: this.getVar('dpLFTireColdPress'),
-        rfTireColdPress: this.getVar('dpRFTireColdPress'),
-        lrTireColdPress: this.getVar('dpLRTireColdPress'),
-        rrTireColdPress: this.getVar('dpRRTireColdPress'),
-      },
-
-      // Orientation extended
-      orientation: {
-        yawNorth: this.getVar('YawNorth'),
-        enterExitReset: this.getVar('EnterExitReset'),
-      },
-
-      // Radio
-      radio: {
-        transmitCarIdx: this.getVar('RadioTransmitCarIdx'),
-        transmitRadioIdx: this.getVar('RadioTransmitRadioIdx'),
-        transmitFrequencyIdx: this.getVar('RadioTransmitFrequencyIdx'),
-        driverMarker: this.getVar('DriverMarker'),
-        pushToTalk: this.getVar('PushToTalk'),
-      },
-
-      // Hybrid / boost
-      hybrid: {
-        manualBoost: this.getVar('ManualBoost'),
-        manualNoBoost: this.getVar('ManualNoBoost'),
-        pushToPass: this.getVar('PushToPass'),
-      },
-
-      // Video capture
-      videoCapture: {
-        enabled: this.getVar('VidCapEnabled'),
-        active: this.getVar('VidCapActive'),
-      },
-
-      // Joker laps
-      jokerLaps: {
-        remain: this.getVar('SessionJokerLapsRemain'),
-        onJokerLap: this.getVar('SessionOnJokerLap'),
-      },
-
-      // ============================================
-      // CarIdx arrays - DATA FOR ALL 64 CARS IN SESSION
-      // ============================================
-      allCars: {
-        // Lap info per car (array of 64)
-        lap: this.getVar('CarIdxLap'),                      // Laps started by car
-        lapCompleted: this.getVar('CarIdxLapCompleted'),    // Laps completed by car
-        lapDistPct: this.getVar('CarIdxLapDistPct'),        // % around lap per car
-
-        // Position per car
-        position: this.getVar('CarIdxPosition'),            // Race position
-        classPosition: this.getVar('CarIdxClassPosition'),  // Class position
-        class: this.getVar('CarIdxClass'),                  // Car class ID
-
-        // Timing per car
-        bestLapTime: this.getVar('CarIdxBestLapTime'),      // Best lap time
-        lastLapTime: this.getVar('CarIdxLastLapTime'),      // Last lap time
-        bestLapNum: this.getVar('CarIdxBestLapNum'),        // Best lap number
-        f2Time: this.getVar('CarIdxF2Time'),                // Time behind leader
-        estTime: this.getVar('CarIdxEstTime'),              // Estimated time to current location
-
-        // Track surface per car
-        trackSurface: this.getVar('CarIdxTrackSurface'),           // Track surface type
-        trackSurfaceMaterial: this.getVar('CarIdxTrackSurfaceMaterial'), // Surface material
-        onPitRoad: this.getVar('CarIdxOnPitRoad'),                 // On pit road?
-
-        // Car state per car
-        steer: this.getVar('CarIdxSteer'),                  // Steering angle (rad)
-        rpm: this.getVar('CarIdxRPM'),                      // Engine RPM
-        gear: this.getVar('CarIdxGear'),                    // Current gear
-
-        // Tire compound per car
-        tireCompound: this.getVar('CarIdxTireCompound'),    // Current tire compound
-        qualTireCompound: this.getVar('CarIdxQualTireCompound'),        // Qual tire compound
-        qualTireCompoundLocked: this.getVar('CarIdxQualTireCompoundLocked'), // Qual compound locked?
-
-        // Flags & repairs per car
-        sessionFlags: this.getVar('CarIdxSessionFlags'),    // Session flags per car
-        fastRepairsUsed: this.getVar('CarIdxFastRepairsUsed'), // Fast repairs used
-
-        // Pacing per car
-        paceLine: this.getVar('CarIdxPaceLine'),            // Pace line (-1 if not pacing)
-        paceRow: this.getVar('CarIdxPaceRow'),              // Pace row (-1 if not pacing)
-        paceFlags: this.getVar('CarIdxPaceFlags'),          // Pace flags
-
-        // Push to pass per car
-        p2pStatus: this.getVar('CarIdxP2P_Status'),         // P2P active?
-        p2pCount: this.getVar('CarIdxP2P_Count'),           // P2P count
       },
     };
   }

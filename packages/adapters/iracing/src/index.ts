@@ -23,6 +23,8 @@ const DEFAULT_CAPABILITIES: CapabilityMap = {
   hasEngineWarnings: false,
   hasTyreTemps: false,
   hasBrakeTemps: false,
+  hasSteeringAngle: false,
+  hasLateralG: false,
 };
 
 export class IracingAdapter extends EventEmitter {
@@ -210,5 +212,7 @@ function buildCapabilities(keys: string[]): CapabilityMap {
     hasEngineWarnings: has('EngineWarnings'),
     hasTyreTemps: has('LFtempCL') || has('RRtempCL'),
     hasBrakeTemps: has('LFbrakeLinePress') || has('LFbrakeTemp'),
+    hasSteeringAngle: has('SteeringWheelAngle'),
+    hasLateralG: has('LatAccel'),
   };
 }
