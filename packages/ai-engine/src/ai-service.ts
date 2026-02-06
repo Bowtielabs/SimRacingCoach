@@ -23,6 +23,7 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
 import type {
     AIServiceConfig,
     SessionContext,
@@ -73,6 +74,7 @@ export class AICoachingService {
     private hasGivenInitialGreeting: boolean = false;
     private initialized: boolean = false;
     private externalAgents: boolean = false;
+
 
     // New tracking for UI
     private lastRecommendation: {
@@ -160,6 +162,8 @@ export class AICoachingService {
             return;
         }
 
+
+
         // 1. Add frame to buffer
         this.frameBuffer.push(frame);
 
@@ -183,6 +187,12 @@ export class AICoachingService {
             this.bufferStartTime = 0; // Reset immediately so progress bar goes to 0% while processing
             await this.processBufferAndSendToEngine();
         }
+
+        // 6. Real-time checks (Flags, Lap Times, Motivation)
+        // These run on every frame or throttled, independent of the 30s buffer
+        await this.checkCriticalFlags(frame);
+        await this.checkLapTime(frame);
+        await this.checkIfStoppedAndMotivate(frame);
     }
 
     /**
@@ -265,188 +275,310 @@ export class AICoachingService {
     }
 
     /**
-     * Process buffer and send to rules engine
+     * Check for new lap and announce time/comparison
      */
-    private async processBufferAndSendToEngine(): Promise<void> {
-        if (this.isProcessingBuffer || this.frameBuffer.length === 0) {
+    private lastLapData: {
+        lapNumber: number;
+        lapTime: number;
+    } | null = null;
+
+    private async checkLapTime(frame: TelemetryFrame): Promise<void> {
+        // Need lapsCompleted and reliable last lap time
+        const lapsCompleted = frame.session?.lapsCompleted;
+        const lastLapTime = frame.lapTimes?.last;
+
+        if (lapsCompleted === undefined || lastLapTime === undefined || lastLapTime <= 0) {
             return;
         }
 
-        this.isProcessingBuffer = true;
+        // Initialize if first time
+        if (this.lastLapData === null) {
+            this.lastLapData = {
+                lapNumber: lapsCompleted,
+                lapTime: lastLapTime
+            };
+            return;
+        }
 
-        try {
-            console.log('\n' + '═'.repeat(60));
-            console.log('[AIService] 🔔 30s window complete - Analyzing buffer');
-            console.log('═'.repeat(60));
+        // Detect new valid lap
+        if (lapsCompleted > this.lastLapData.lapNumber) {
+            const previousTime = this.lastLapData.lapTime;
+            const newTime = lastLapTime;
+            const isImprovement = newTime < previousTime;
 
-            // Log buffer summary
-            const firstFrame = this.frameBuffer[0];
-            const lastFrame = this.frameBuffer[this.frameBuffer.length - 1];
 
-            console.log(`\n📋 BUFFER ENVIADO AL MOTOR:`);
-            console.log(`   Frames: ${this.frameBuffer.length}`);
-            console.log(`   Duration: 30 seconds`);
-            console.log(`   First frame speed: ${Math.round(firstFrame?.powertrain?.speedKph || 0)} kph`);
-            console.log(`   Last frame speed: ${Math.round(lastFrame?.powertrain?.speedKph || 0)} kph`);
 
-            // Log tail of buffer (last 5 frames)
-            console.log(`\n📋 BUFFER TAIL (últimos 5 frames):`);
-            const tail = this.frameBuffer.slice(-5);
-            tail.forEach((f, i) => {
-                console.log(`   [${this.frameBuffer.length - 5 + i}] Speed=${Math.round(f.powertrain?.speedKph || 0)}kph, Throttle=${Math.round((f.powertrain?.throttle || 0) * 100)}%, Brake=${Math.round((f.powertrain?.brake || 0) * 100)}%`);
-            });
+            // 1. Comparison Phrase
+            const introPhrase = isImprovement ? 'lap_improved' : 'lap_worse';
 
-            // Calculate analysis using rules engine
-            const analysis = TelemetryRulesEngine.calculateAnalysis(lastFrame, this.frameBuffer);
+            // 2. Format Time to Sequence
+            // Example: 83.456s -> "minuto 1... 23... punto... 4" (simplified for now to seconds if < 60 or just raw digits)
+            // Let's stick to "Tiempo... (digits)" or "Uno... dos... tres... punto... cuatro"
+            // To make it sound natural "1 minute 23 point 4" needs minute handling.
+            // Simplified Logic: Just digits and point. "1... 2... 3... punto... 4"
 
-            console.log(`\n📈 ANÁLISIS:`);
-            console.log(`   HardBrakes: ${analysis.patterns.hardBrakingCount}`);
-            console.log(`   ThrottleChanges: ${analysis.patterns.throttleChanges}`);
-            console.log(`   AvgSpeed: ${Math.round(analysis.averages.speed)} kph`);
+            const timeStr = newTime.toFixed(3); // "83.456" or "123.456"
+            // Note: User wants "Time 1.23". If time is > 60s, usually we say 1 minute...
+            // User request: "decir Tiempo 1.23 ... (tiempo uno punto dos tres)"
+            // Assuming we just read digits of the seconds/minutes.
 
-            console.log(`\n🔍 DEBUG - Datos del frame actual:`);
-            console.log(`   RPM: ${lastFrame?.powertrain?.rpm || 'N/A'}`);
-            console.log(`   Water temp: ${lastFrame?.temps?.waterC || 'N/A'}°C`);
-            console.log(`   Oil temp: ${lastFrame?.temps?.oilC || 'N/A'}°C`);
-            console.log(`   Tyre temps: ${lastFrame?.temps?.tyreC?.join(', ') || 'N/A'}`);
-            console.log(`   Brake temps: ${lastFrame?.temps?.brakeC?.join(', ') || 'N/A'}`);
+            // Let's convert to reasonable human time string first? 
+            // Actually user asked specifically for "numbers 0-9" and "dot".
+            // So we parse the string char by char.
 
-            // Get ALL matching rules from rules engine (sorted by priority)
-            const allRules = this.rulesEngine.analyzeAll(analysis, 50); // Pedir hasta 50 reglas (devuelve TODAS)
+            // Optimization: If > 60s, convert to M:SS.mmm?
+            // "1:23.456" -> 1, 2, 3, point, 4, 5, 6.
+            // Let's keep it simple: Raw time in seconds if < 60, or M:SS if > 60?
+            // iRacing sends seconds. 85.5s.
+            // Let's do logical formatting: M:SS.m
 
-            if (allRules.length > 0) {
-                console.log(`\n🎯 REGLAS ACTIVADAS (${allRules.length} total):`);
-                console.log('─'.repeat(60));
+            const minutes = Math.floor(newTime / 60);
+            const seconds = Math.floor(newTime % 60);
+            const millis = Math.floor((newTime * 10) % 10); // Just 1 decimal for audio speed? Or 3?
+            // User said "latencia entre numeros", implies speed is key. 1 decimal is usually enough for audio.
 
-                // Loguear TODAS las reglas que se cumplieron
-                allRules.forEach((rule, i) => {
-                    const marker = i < 4 ? '🔊' : '  ';
-                    console.log(`${marker} [${i + 1}] ${rule.ruleId} (P${rule.priority}) - "${rule.advice}"`);
-                });
+            const sequence: string[] = [];
 
-                console.log('─'.repeat(60));
+            // Intro
+            sequence.push(introPhrase);
+            sequence.push('lap_time_intro'); // "Tiempo"
 
-                // Hablar hasta 4 consejos de mayor prioridad
-                const MAX_CONSEJOS = 4;
-                const topRules = allRules.slice(0, MAX_CONSEJOS);
-
-                console.log(`\n🔊 HABLANDO ${topRules.length} consejos (de ${allRules.length} total):`);
-                for (const rule of topRules) {
-                    console.log(`   -> "${rule.advice}" (${rule.ruleId})`);
-
-                    // Track recommendation for UI feed
-                    const recId = `${rule.ruleId}-${Date.now()}`;
-                    this.recommendationHistory.unshift({
-                        id: recId,
-                        ruleId: rule.ruleId,
-                        advice: rule.advice,
-                        category: rule.category,
-                        priority: rule.priority,
-                        timestamp: Date.now()
-                    });
-
-                    // Keep only last 20 recommendations
-                    if (this.recommendationHistory.length > 20) {
-                        this.recommendationHistory.pop();
-                    }
-
-                    // ⚡ Using PiperAgent with prerendered WAV (NO TTS synthesis)
-                    await this.tts.speak(rule.ruleId, 'normal');
+            // Digits generator
+            const pushDigits = (num: number) => {
+                const s = num.toString();
+                for (const char of s) {
+                    if (char >= '0' && char <= '9') sequence.push(`num_${char}`);
                 }
-                console.log('[AIService] ✓ Consejos reproducidos');
-            } else {
-                console.log('[AIService] ℹ️ No hay consejos aplicables');
+            };
+
+            // Minutes (if any)
+            if (minutes > 0) {
+                pushDigits(minutes);
+                // We don't have "minute" audio, just numbers.
+                // "Uno... veintitres..." -> "Uno... dos... tres..."
+                // Maybe add a small pause? 
+                // Assuming "point" separator for now is only custom audio.
             }
 
-            // Clear buffer (bufferStartTime already reset when 10s was reached)
-            this.frameBuffer = [];
-            console.log('[AIService] ✓ Buffer cleared, ready for new 10s window');
+            // Separator between min/sec? User didn't ask for it, but logic suggests it.
+            // Let's just read seconds if no minutes audio.
+            // Wait, user example: "Tiempo 1.23 ... uno punto dos tres".
+            // This sounds like 1.23 seconds? Or 1 minute 23?
+            // "1.23" in common parlanse is 1m 23s.
+            // Let's try to mimic that structure.
 
-        } catch (error) {
-            console.error('[AIService] ❌ Error processing buffer:', error);
-        } finally {
-            this.isProcessingBuffer = false;
+            // If minutes > 0: Minute digits -> pause -> Seconds digits -> point -> millis
+            if (minutes > 0) {
+                pushDigits(minutes);
+                // Add a "point" as separator or just pause? "Uno [punto] veintitres"?
+                // Let's use point for now as it's the only separator we have.
+                sequence.push('num_point');
+            }
+
+            // Seconds (pad with 0 if necessary? "1:05")
+            // Audio reading digit by digit doesn't need padding logic really, just "cero cinco".
+            if (seconds < 10 && minutes > 0) sequence.push('num_0');
+            pushDigits(seconds);
+
+            sequence.push('num_point');
+            pushDigits(millis);
+
+            if (sequence.length > 0) {
+                await this.tts.playSequence(sequence, 'urgent');
+            }
+
+            // Update state
+            this.lastLapData = {
+                lapNumber: lapsCompleted,
+                lapTime: newTime
+            };
         }
     }
+}
 
+    /**
+     * Process buffer and send to rules engine
+     */
+    private async processBufferAndSendToEngine(): Promise < void> {
+    if(this.isProcessingBuffer || this.frameBuffer.length === 0) {
+    return;
+}
 
+this.isProcessingBuffer = true;
 
-    private async giveInitialGreeting(): Promise<void> {
-        try {
-            const greetings = [
-                "greeting-1",
-                "greeting-2",
-                "greeting-3",
-                "greeting-4"
-            ];
+try {
+    console.log('\n' + '═'.repeat(60));
+    console.log('[AIService] 🔔 30s window complete - Analyzing buffer');
+    console.log('═'.repeat(60));
 
-            const greeting = greetings[Math.floor(Math.random() * greetings.length)];
-            if (DEBUG.GREETING) console.log(`[AIService] 🎯 GREETING: "${greeting}"`);
+    // Log buffer summary
+    const firstFrame = this.frameBuffer[0];
+    const lastFrame = this.frameBuffer[this.frameBuffer.length - 1];
 
-            await this.tts.speak(greeting, 'normal');
-            if (DEBUG.GREETING) console.log('[AIService] ✅ Greeting spoken');
-        } catch (error) {
-            if (DEBUG.GREETING) console.error('[AIService] Greeting failed:', error);
+    console.log(`\n📋 BUFFER ENVIADO AL MOTOR:`);
+    console.log(`   Frames: ${this.frameBuffer.length}`);
+    console.log(`   Duration: 30 seconds`);
+    console.log(`   First frame speed: ${Math.round(firstFrame?.powertrain?.speedKph || 0)} kph`);
+    console.log(`   Last frame speed: ${Math.round(lastFrame?.powertrain?.speedKph || 0)} kph`);
+
+    // Log tail of buffer (last 5 frames)
+    console.log(`\n📋 BUFFER TAIL (últimos 5 frames):`);
+    const tail = this.frameBuffer.slice(-5);
+    tail.forEach((f, i) => {
+        console.log(`   [${this.frameBuffer.length - 5 + i}] Speed=${Math.round(f.powertrain?.speedKph || 0)}kph, Throttle=${Math.round((f.powertrain?.throttle || 0) * 100)}%, Brake=${Math.round((f.powertrain?.brake || 0) * 100)}%`);
+    });
+
+    // Calculate analysis using rules engine
+    const analysis = TelemetryRulesEngine.calculateAnalysis(lastFrame, this.frameBuffer);
+
+    console.log(`\n📈 ANÁLISIS:`);
+    console.log(`   HardBrakes: ${analysis.patterns.hardBrakingCount}`);
+    console.log(`   ThrottleChanges: ${analysis.patterns.throttleChanges}`);
+    console.log(`   AvgSpeed: ${Math.round(analysis.averages.speed)} kph`);
+
+    console.log(`\n🔍 DEBUG - Datos del frame actual:`);
+    console.log(`   RPM: ${lastFrame?.powertrain?.rpm || 'N/A'}`);
+    console.log(`   Water temp: ${lastFrame?.temps?.waterC || 'N/A'}°C`);
+    console.log(`   Oil temp: ${lastFrame?.temps?.oilC || 'N/A'}°C`);
+    console.log(`   Tyre temps: ${lastFrame?.temps?.tyreC?.join(', ') || 'N/A'}`);
+    console.log(`   Brake temps: ${lastFrame?.temps?.brakeC?.join(', ') || 'N/A'}`);
+
+    // Get ALL matching rules from rules engine (sorted by priority)
+    const allRules = this.rulesEngine.analyzeAll(analysis, 50); // Pedir hasta 50 reglas (devuelve TODAS)
+
+    if (allRules.length > 0) {
+        console.log(`\n🎯 REGLAS ACTIVADAS (${allRules.length} total):`);
+        console.log('─'.repeat(60));
+
+        // Loguear TODAS las reglas que se cumplieron
+        allRules.forEach((rule, i) => {
+            const marker = i < 4 ? '🔊' : '  ';
+            console.log(`${marker} [${i + 1}] ${rule.ruleId} (P${rule.priority}) - "${rule.advice}"`);
+        });
+
+        console.log('─'.repeat(60));
+
+        // Hablar hasta 4 consejos de mayor prioridad
+        const MAX_CONSEJOS = 4;
+        const topRules = allRules.slice(0, MAX_CONSEJOS);
+
+        console.log(`\n🔊 HABLANDO ${topRules.length} consejos (de ${allRules.length} total):`);
+        for (const rule of topRules) {
+            console.log(`   -> "${rule.advice}" (${rule.ruleId})`);
+
+            // Track recommendation for UI feed
+            const recId = `${rule.ruleId}-${Date.now()}`;
+            this.recommendationHistory.unshift({
+                id: recId,
+                ruleId: rule.ruleId,
+                advice: rule.advice,
+                category: rule.category,
+                priority: rule.priority,
+                timestamp: Date.now()
+            });
+
+            // Keep only last 20 recommendations
+            if (this.recommendationHistory.length > 20) {
+                this.recommendationHistory.pop();
+            }
+
+            // ⚡ Using PiperAgent with prerendered WAV (NO TTS synthesis)
+            await this.tts.speak(rule.ruleId, 'normal');
         }
+        console.log('[AIService] ✓ Consejos reproducidos');
+    } else {
+        console.log('[AIService] ℹ️ No hay consejos aplicables');
     }
 
-    setLanguage(language: SupportedLanguage): void {
-        this.config.language.stt = language;
-        this.config.language.tts = language;
-        this.tts.setLanguage(language);
-        if (DEBUG.LIFECYCLE) console.log(`[AIService] Language changed to: ${language}`);
+    // Clear buffer (bufferStartTime already reset when 10s was reached)
+    this.frameBuffer = [];
+    console.log('[AIService] ✓ Buffer cleared, ready for new 10s window');
+
+} catch (error) {
+    console.error('[AIService] ❌ Error processing buffer:', error);
+} finally {
+    this.isProcessingBuffer = false;
+}
     }
 
-    updateConfig(partial: Partial<AIServiceConfig>) {
-        this.config = { ...this.config, ...partial };
-        if (partial.analysisInterval) {
-            console.log(`[AIService] Analysis interval updated to ${partial.analysisInterval}s`);
-        }
+
+
+    private async giveInitialGreeting(): Promise < void> {
+    try {
+        const greetings = [
+            "greeting-1",
+            "greeting-2",
+            "greeting-3",
+            "greeting-4"
+        ];
+
+        const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+        if(DEBUG.GREETING) console.log(`[AIService] 🎯 GREETING: "${greeting}"`);
+
+        await this.tts.speak(greeting, 'normal');
+        if(DEBUG.GREETING) console.log('[AIService] ✅ Greeting spoken');
+    } catch(error) {
+        if (DEBUG.GREETING) console.error('[AIService] Greeting failed:', error);
     }
+}
 
-    setMuted(muted: boolean) {
-        this.tts.setMuted(muted);
+setLanguage(language: SupportedLanguage): void {
+    this.config.language.stt = language;
+    this.config.language.tts = language;
+    this.tts.setLanguage(language);
+    if(DEBUG.LIFECYCLE) console.log(`[AIService] Language changed to: ${language}`);
+}
+
+updateConfig(partial: Partial<AIServiceConfig>) {
+    this.config = { ...this.config, ...partial };
+    if (partial.analysisInterval) {
+        console.log(`[AIService] Analysis interval updated to ${partial.analysisInterval}s`);
     }
+}
 
-    getStatus() {
-        // Dynamic target based on configured interval
-        const intervalFrames = this.config.analysisInterval * 20; // ~20fps assumption
-        const intervalMs = this.config.analysisInterval * 1000;
+setMuted(muted: boolean) {
+    this.tts.setMuted(muted);
+}
 
-        const currentFrames = this.frameBuffer.length;
-        const elapsed = this.bufferStartTime > 0 ? Date.now() - this.bufferStartTime : 0; // Handle reset case
-        const secondsToAnalysis = Math.max(0, (intervalMs - elapsed) / 1000);
-        const timeBasedProgress = this.bufferStartTime > 0 ? Math.min(100, Math.round((elapsed / intervalMs) * 100)) : 0;
+getStatus() {
+    // Dynamic target based on configured interval
+    const intervalFrames = this.config.analysisInterval * 20; // ~20fps assumption
+    const intervalMs = this.config.analysisInterval * 1000;
 
-        return {
-            initialized: this.initialized,
-            sessionActive: this.sessionContext !== null,
-            mode: 'ai' as const,
-            language: this.config.language,
+    const currentFrames = this.frameBuffer.length;
+    const elapsed = this.bufferStartTime > 0 ? Date.now() - this.bufferStartTime : 0; // Handle reset case
+    const secondsToAnalysis = Math.max(0, (intervalMs - elapsed) / 1000);
+    const timeBasedProgress = this.bufferStartTime > 0 ? Math.min(100, Math.round((elapsed / intervalMs) * 100)) : 0;
 
-            audio: {
-                isSpeaking: this.tts.isSpeaking(),
-                queue: this.tts.getQueueLength()
-            },
+    return {
+        initialized: this.initialized,
+        sessionActive: this.sessionContext !== null,
+        mode: 'ai' as const,
+        language: this.config.language,
 
-            buffer: {
-                size: currentFrames,
-                target: intervalFrames,
-                progress: timeBasedProgress, // Now based on time elapsed (0-100% over 10s)
-                secondsToAnalysis: Math.round(secondsToAnalysis)
-            },
+        audio: {
+            isSpeaking: this.tts.isSpeaking(),
+            queue: this.tts.getQueueLength()
+        },
 
-            lastRecommendation: this.lastRecommendation,
+        buffer: {
+            size: currentFrames,
+            target: intervalFrames,
+            progress: timeBasedProgress, // Now based on time elapsed (0-100% over 10s)
+            secondsToAnalysis: Math.round(secondsToAnalysis)
+        },
 
-            recommendations: this.recommendationHistory
-        };
-    }
+        lastRecommendation: this.lastRecommendation,
 
-    async dispose(): Promise<void> {
-        await this.tts.dispose();
-        this.initialized = false;
-        if (DEBUG.LIFECYCLE) console.log('[AIService] Disposed');
-    }
+        recommendations: this.recommendationHistory
+    };
+}
+
+    async dispose(): Promise < void> {
+    await this.tts.dispose();
+    this.initialized = false;
+    if(DEBUG.LIFECYCLE) console.log('[AIService] Disposed');
+}
 }
 
 export default AICoachingService;

@@ -261,9 +261,9 @@ export const TELEMETRY_RULES: TelemetryRule[] = [
             if (!d.current?.temps?.tyreC || d.current.temps.tyreC.length === 0) return false;
             const tyreTemps = d.current.temps.tyreC;
             const avgTemp = tyreTemps.reduce((a, b) => a + b, 0) / tyreTemps.length;
-            return avgTemp < 65 && avgTemp > 0;
+            return avgTemp < 55 && avgTemp > 0;
         },
-        advice: 'Gomas muy frías (menos de 65°C), hacé serpentinas',
+        advice: 'Gomas muy frías (menos de 55°C), hacé serpentinas',
         cooldown: 40
     },
 
@@ -427,5 +427,47 @@ export const TELEMETRY_RULES: TelemetryRule[] = [
         },
         advice: '¡Riesgo de calado! RPM muy bajas, bajá de marcha o acelerá',
         cooldown: 15
+    },
+
+    // ========================================
+    // CATEGORÍA 7: AYUDAS Y AMBIENTE (NEW)
+    // ========================================
+
+    {
+        id: 'abs-heavy-usage',
+        category: 'technique',
+        priority: 6,
+        condition: (d) => {
+            if (!d.current?.carControls?.absActive) return false;
+            // Solo si ABS está activo y frenando fuerte
+            return d.current.carControls.absActive && (d.current.powertrain?.brake || 0) > 0.8;
+        },
+        advice: 'Estás abusando del ABS, frená más suave en la entrada',
+        cooldown: 20
+    },
+
+    {
+        id: 'tc-heavy-usage',
+        category: 'technique',
+        priority: 6,
+        condition: (d) => {
+            if (!d.current?.carControls?.tcActive) return false;
+            // Solo si TC está activo y acelerando fuerte
+            return d.current.carControls.tcActive && (d.current.powertrain?.throttle || 0) > 0.8;
+        },
+        advice: 'El control de tracción está cortando, gestioná el gas',
+        cooldown: 20
+    },
+
+    {
+        id: 'track-hot',
+        category: 'strategy',
+        priority: 5,
+        condition: (d) => {
+            if (!d.current?.temps?.trackC) return false;
+            return d.current.temps.trackC > 45;
+        },
+        advice: 'Pista muy caliente (más de 45°C), cuidá las gomas',
+        cooldown: 120 // Aviso muy espaciado
     }
 ];

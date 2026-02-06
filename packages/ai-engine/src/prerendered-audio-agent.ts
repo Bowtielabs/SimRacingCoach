@@ -89,18 +89,42 @@ export class PrerenderedAudioAgent {
         this.processQueue();
     }
 
+    /**
+     * Plays a sequence of audio files seamlessly using ffmpeg concat filter
+     * @param fileIds Array of file IDs to play
+     * @param priority Priority of the sequence
+     */
+    async playSequence(fileIds: string[], priority: 'normal' | 'urgent' = 'normal'): Promise<void> {
+        // Create a unique ID for this sequence to handle it as a single queue item
+        // or handle it internally. For now, let's treat it as a special queue item format "SEQ:id1,id2,id3"
+        const sequenceId = `SEQ:${fileIds.join(',')}`;
+
+        if (priority === 'urgent') {
+            this.queue.unshift(sequenceId);
+        } else {
+            this.queue.push(sequenceId);
+        }
+
+        this.processQueue();
+    }
+
     private async processQueue() {
         if (this.isPlaying || this.queue.length === 0) return;
 
         this.isPlaying = true;
-        const ruleId = this.queue.shift();
+        const itemId = this.queue.shift();
 
         try {
-            if (ruleId) {
+            if (itemId) {
                 if (this.muted) {
-                    // console.log('[AudioAgent] Skipping playback (muted):', ruleId);
-                } else if (this.availableFiles.has(ruleId)) {
-                    const filePath = path.join(this.audioDir, `${ruleId}.wav`);
+                    // console.log('[AudioAgent] Skipping playback (muted):', itemId);
+                } else if (itemId.startsWith('SEQ:')) {
+                    // Handle Sequence
+                    const fileIds = itemId.substring(4).split(',');
+                    await this.playSequenceWithFFplay(fileIds);
+                } else if (this.availableFiles.has(itemId)) {
+                    // Handle Single File
+                    const filePath = path.join(this.audioDir, `${itemId}.wav`);
                     await this.playWithFFplay(filePath);
                 }
             }
@@ -112,6 +136,56 @@ export class PrerenderedAudioAgent {
                 setTimeout(() => this.processQueue(), 100);
             }
         }
+    }
+
+    private playSequenceWithFFplay(fileIds: string[]): Promise<void> {
+        return new Promise((resolve) => {
+            // Filter valid files
+            const validFiles = fileIds.filter(id => this.availableFiles.has(id));
+
+            if (validFiles.length === 0) {
+                resolve();
+                return;
+            }
+
+            // Construct ffmpeg complex filter for concatenation
+            // ffmpeg -i 1.wav -i 2.wav -filter_complex "[0:a][1:a]concat=n=2:v=0:a=1[out]" -map "[out]" -f wav - | ffplay -
+
+            // Simpler approach for ffplay: use concat protocol with intermediate list or complex filter direct playback
+            // ffplay -f lavfi "amovie=1.wav,amovie=2.wav,concat=n=2:v=0:a=1" 
+            // BUT Windows paths are messy in filter strings. 
+
+            // Safer approach: Generate a temporary concat list file
+            // file 'path/to/1.wav'
+            // file 'path/to/2.wav'
+
+            const listFileName = `concat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.txt`;
+            const listPath = path.join(this.audioDir, listFileName);
+
+            try {
+                const fileContent = validFiles
+                    .map(id => `file '${id}.wav'`) // Assuming cwd is audioDir or using relative paths
+                    .join('\n');
+
+                fs.writeFileSync(listPath, fileContent);
+
+                const command = `ffplay -f concat -safe 0 -nodisp -autoexit -v 0 "${listPath}"`;
+
+                exec(command, (error) => {
+                    // Cleanup list file
+                    try { fs.unlinkSync(listPath); } catch { }
+
+                    if (error) {
+                        console.error('[AudioAgent] Sequence Error:', error.message);
+                    }
+                    resolve();
+                });
+
+            } catch (err) {
+                console.error('[AudioAgent] Failed to create concat list:', err);
+                resolve();
+            }
+        });
     }
 
     private playWithFFplay(filePath: string): Promise<void> {

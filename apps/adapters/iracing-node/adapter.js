@@ -57,12 +57,23 @@ setInterval(() => {
                 throttle_pct: (telemetry.Throttle || 0) * 100,
                 brake_pct: (telemetry.Brake || 0) * 100,
                 steering_rad: telemetry.SteeringWheelAngle,
-                lap: telemetry.Lap,
+                steering_rad: telemetry.SteeringWheelAngle,
+                session: {
+                    lap: telemetry.Lap,
+                    lapsCompleted: telemetry.LapCompleted || (telemetry.Lap > 0 ? telemetry.Lap - 1 : 0),
+                    timeRemaining: telemetry.SessionTimeRemain,
+                    lapsRemaining: telemetry.SessionLapsRemain
+                },
                 session_flags_raw: telemetry.SessionFlags,
                 traffic: telemetry.CarLeftRight,
                 temps: {
                     water_c: telemetry.WaterTemp,
-                    oil_c: telemetry.OilTemp
+                    oil_c: telemetry.OilTemp,
+                    track_c: telemetry.TrackTempCrew
+                },
+                carControls: {
+                    absActive: telemetry.BrakeABSActive,
+                    tcActive: telemetry.TractionControlActive || (telemetry.dcTractionControl > 0)
                 },
                 fuel_level: telemetry.FuelLevel,
                 on_pit_road: telemetry.OnPitRoad,
