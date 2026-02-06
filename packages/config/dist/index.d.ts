@@ -26,14 +26,17 @@ export declare const configSchema: z.ZodObject<{
         voice: z.ZodOptional<z.ZodString>;
         volume: z.ZodNumber;
         rate: z.ZodNumber;
+        muted: z.ZodOptional<z.ZodBoolean>;
     }, "strip", z.ZodTypeAny, {
         volume: number;
         rate: number;
         voice?: string | undefined;
+        muted?: boolean | undefined;
     }, {
         volume: number;
         rate: number;
         voice?: string | undefined;
+        muted?: boolean | undefined;
     }>;
     hotkeys: z.ZodObject<{
         muteToggle: z.ZodString;
@@ -154,6 +157,7 @@ export declare const configSchema: z.ZodObject<{
         volume: number;
         rate: number;
         voice?: string | undefined;
+        muted?: boolean | undefined;
     };
     hotkeys: {
         muteToggle: string;
@@ -204,6 +208,7 @@ export declare const configSchema: z.ZodObject<{
         volume: number;
         rate: number;
         voice?: string | undefined;
+        muted?: boolean | undefined;
     };
     hotkeys: {
         muteToggle: string;

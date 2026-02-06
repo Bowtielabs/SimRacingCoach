@@ -35,8 +35,9 @@ const elements = {
   recTime: document.getElementById('rec-time'),
 
   // Control buttons
-  focusBtn: document.getElementById('focus-btn'),
-  muteBtn: document.getElementById('mute-btn')
+  muteBtn: document.getElementById('mute-btn'),
+  coachingSlider: document.getElementById('coaching-slider'),
+  sliderValueLabel: document.getElementById('slider-value-label')
 };
 
 // ========== INITIALIZATION ==========
@@ -46,6 +47,36 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // Load translations first
   await loadTranslations();
+
+  // Load Config State (Mute/Slider)
+  try {
+    const config = await window.api.getConfig();
+    console.log('[Renderer] Initial config loaded:', config);
+
+    // Set Mute State
+    if (config.voice?.muted) {
+      elements.muteBtn.classList.add('active');
+    }
+
+    // Set Slider State
+    const interval = config.ai?.analysisInterval || 20;
+    let sliderVal = 2; // Default Medium
+    if (interval >= 30) sliderVal = 1;
+    else if (interval <= 10) sliderVal = 3;
+
+    elements.coachingSlider.value = sliderVal;
+
+    // Update label manually
+    const COACHING_LEVELS = {
+      1: { label: 'Bajo (30s)' },
+      2: { label: 'Medio (20s)' },
+      3: { label: 'Alto (10s)' }
+    };
+    elements.sliderValueLabel.textContent = COACHING_LEVELS[sliderVal].label;
+
+  } catch (err) {
+    console.error('[Renderer] Check config error:', err);
+  }
 
   // Setup event listeners
   setupEventListeners();
@@ -184,45 +215,55 @@ function setupEventListeners() {
     }
   });
 
-  // Focus Mode Toggle
-  elements.focusBtn.addEventListener('click', async () => {
-    const isActive = elements.focusBtn.classList.contains('active');
-
-    try {
-      if (isActive) {
-        // Deactivate focus
-        await window.api.focus(); // This toggles focus in backend
-        elements.focusBtn.classList.remove('active');
-        console.log('[Renderer] Focus mode OFF');
-      } else {
-        // Activate focus
-        await window.api.focus();
-        elements.focusBtn.classList.add('active');
-        console.log('[Renderer] Focus mode ON');
-      }
-    } catch (err) {
-      console.error('[Renderer] Focus toggle error:', err);
-    }
-  });
-
   // Mute Toggle
   elements.muteBtn.addEventListener('click', async () => {
     const isActive = elements.muteBtn.classList.contains('active');
+    const newState = !isActive;
+
+    // Toggle UI immediately for responsiveness
+    if (newState) elements.muteBtn.classList.add('active');
+    else elements.muteBtn.classList.remove('active');
 
     try {
-      if (isActive) {
-        // Unmute
-        await window.api.unmute();
-        elements.muteBtn.classList.remove('active');
-        console.log('[Renderer] Mute OFF');
-      } else {
-        // Mute
-        await window.api.mute();
-        elements.muteBtn.classList.add('active');
-        console.log('[Renderer] Mute ON');
-      }
+      await window.api.updateConfig({
+        voice: { muted: newState }
+      });
+      console.log(`[Renderer] Mute set to: ${newState}`);
     } catch (err) {
       console.error('[Renderer] Mute toggle error:', err);
+      // Revert UI on error
+      if (newState) elements.muteBtn.classList.remove('active');
+      else elements.muteBtn.classList.add('active');
+    }
+  });
+
+  // Coaching Level Slider
+  const COACHING_LEVELS = {
+    1: { label: 'Bajo (30s)', interval: 30, text: 'Bajo' },
+    2: { label: 'Medio (20s)', interval: 20, text: 'Medio' },
+    3: { label: 'Alto (10s)', interval: 10, text: 'Alto' }
+  };
+
+  elements.coachingSlider.addEventListener('input', () => {
+    const val = elements.coachingSlider.value;
+    const level = COACHING_LEVELS[val];
+    if (level) {
+      elements.sliderValueLabel.textContent = level.label;
+    }
+  });
+
+  elements.coachingSlider.addEventListener('change', async () => {
+    const val = elements.coachingSlider.value;
+    const level = COACHING_LEVELS[val];
+    if (!level) return;
+
+    try {
+      console.log(`[Renderer] Updates coaching level: ${level.text} (${level.interval}s)`);
+      await window.api.updateConfig({
+        ai: { analysisInterval: level.interval }
+      });
+    } catch (err) {
+      console.error('[Renderer] Slider config error:', err);
     }
   });
 }

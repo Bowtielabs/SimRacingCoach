@@ -26,6 +26,7 @@ export const configSchema = z.object({
         voice: z.string().optional(),
         volume: z.number().min(0).max(100),
         rate: z.number().min(-10).max(10),
+        muted: z.boolean().optional(),
     }),
     hotkeys: hotkeySchema,
     filters: z.object({
@@ -66,6 +67,7 @@ export const defaultConfig = {
         voice: 'Microsoft Raul Desktop',
         volume: 80,
         rate: 0,
+        muted: false,
     },
     hotkeys: {
         muteToggle: 'Ctrl+Shift+M',
@@ -91,7 +93,7 @@ export const defaultConfig = {
         language: 'es', // Spanish default
         voiceInput: false, // Disabled by default
         voiceInputMode: 'vad', // Voice activity detection
-        analysisInterval: 10, // Every 10 seconds
+        analysisInterval: 20, // Every 20 seconds (Medium)
     },
     debug: {
         telemetryDump: true,

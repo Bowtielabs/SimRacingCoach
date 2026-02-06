@@ -30,7 +30,7 @@ import type {
 } from './types.js';
 
 const DEFAULT_CONFIG: AIServiceConfig = {
-    analysisInterval: 30, // 30 seconds buffer window
+    analysisInterval: 20, // 20 seconds buffer window (Medium)
     enabled: true,
     mode: 'ai',
     language: {
@@ -176,9 +176,10 @@ export class AICoachingService {
             console.log(`[Buffer] 📊 frames=${this.frameBuffer.length}, elapsed=${(elapsed / 1000).toFixed(1)}s/30s (${progress.toFixed(0)}%), isProcessing=${this.isProcessingBuffer}`);
         }
 
-        // 5. Every 10 seconds, process buffer and send to rules engine
-        if (elapsed >= 10000 && !this.isProcessingBuffer) {
-            if (DEBUG.BUFFER) console.log(`[Buffer] ⏰ 10s reached! Calling processBufferAndSendToEngine...`);
+        // 5. Every X seconds (configurable), process buffer and send to rules engine
+        const intervalMs = this.config.analysisInterval * 1000;
+        if (elapsed >= intervalMs && !this.isProcessingBuffer) {
+            if (DEBUG.BUFFER) console.log(`[Buffer] ⏰ ${this.config.analysisInterval}s reached! Calling processBufferAndSendToEngine...`);
             this.bufferStartTime = 0; // Reset immediately so progress bar goes to 0% while processing
             await this.processBufferAndSendToEngine();
         }
@@ -396,12 +397,26 @@ export class AICoachingService {
         if (DEBUG.LIFECYCLE) console.log(`[AIService] Language changed to: ${language}`);
     }
 
+    updateConfig(partial: Partial<AIServiceConfig>) {
+        this.config = { ...this.config, ...partial };
+        if (partial.analysisInterval) {
+            console.log(`[AIService] Analysis interval updated to ${partial.analysisInterval}s`);
+        }
+    }
+
+    setMuted(muted: boolean) {
+        this.tts.setMuted(muted);
+    }
+
     getStatus() {
-        const targetFrames = 200; // 10s * ~20fps (realistic frame rate from mock)
+        // Dynamic target based on configured interval
+        const intervalFrames = this.config.analysisInterval * 20; // ~20fps assumption
+        const intervalMs = this.config.analysisInterval * 1000;
+
         const currentFrames = this.frameBuffer.length;
         const elapsed = this.bufferStartTime > 0 ? Date.now() - this.bufferStartTime : 0; // Handle reset case
-        const secondsToAnalysis = Math.max(0, (10000 - elapsed) / 1000);
-        const timeBasedProgress = this.bufferStartTime > 0 ? Math.min(100, Math.round((elapsed / 10000) * 100)) : 0; // 0% when reset
+        const secondsToAnalysis = Math.max(0, (intervalMs - elapsed) / 1000);
+        const timeBasedProgress = this.bufferStartTime > 0 ? Math.min(100, Math.round((elapsed / intervalMs) * 100)) : 0;
 
         return {
             initialized: this.initialized,
@@ -416,7 +431,7 @@ export class AICoachingService {
 
             buffer: {
                 size: currentFrames,
-                target: targetFrames,
+                target: intervalFrames,
                 progress: timeBasedProgress, // Now based on time elapsed (0-100% over 10s)
                 secondsToAnalysis: Math.round(secondsToAnalysis)
             },

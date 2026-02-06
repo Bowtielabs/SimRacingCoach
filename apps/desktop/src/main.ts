@@ -267,7 +267,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('service:mute', async () => controlService('/mute'));
   ipcMain.handle('service:unmute', async () => controlService('/unmute'));
   ipcMain.handle('service:repeat', async () => controlService('/repeat'));
-  ipcMain.handle('service:focus', async () => controlService('/focus'));
+
   ipcMain.handle('voice:test', async (_event, text: string, options?: any) => {
     console.log(`[Main] IPC voice:test received: "${text}"`, options);
 

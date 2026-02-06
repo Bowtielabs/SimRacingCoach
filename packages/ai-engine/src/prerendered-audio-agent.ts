@@ -16,6 +16,7 @@ export class PrerenderedAudioAgent {
     private volume: number;
     private isPlaying: boolean = false;
     private queue: string[] = [];
+    private muted: boolean = false;
 
     // Cache to check if files exist before trying to play
     private availableFiles: Set<string> = new Set();
@@ -96,7 +97,9 @@ export class PrerenderedAudioAgent {
 
         try {
             if (ruleId) {
-                if (this.availableFiles.has(ruleId)) {
+                if (this.muted) {
+                    // console.log('[AudioAgent] Skipping playback (muted):', ruleId);
+                } else if (this.availableFiles.has(ruleId)) {
                     const filePath = path.join(this.audioDir, `${ruleId}.wav`);
                     await this.playWithFFplay(filePath);
                 }
@@ -139,6 +142,15 @@ export class PrerenderedAudioAgent {
 
     setLanguage(lang: string) {
         // No-op for prerendered
+    }
+
+    setMuted(muted: boolean) {
+        this.muted = muted;
+        if (this.muted) {
+            console.log('[AudioAgent] Muted');
+        } else {
+            console.log('[AudioAgent] Unmuted');
+        }
     }
 
     async dispose(): Promise<void> {

@@ -58,6 +58,24 @@ function applyConfig(next: AppConfig) {
     logger.info({ from: config.adapter.id, to: next.adapter.id }, 'adapter changed, restarting...');
     startAdapter(next.adapter.id as AdapterId);
   }
+
+  // Propagate config changes to AI Service
+  if (aiService) {
+    // Update AI config (including interval)
+    if (next.ai) {
+      aiService.updateConfig(next.ai as any); // Cast to any to avoid partial type mismatch
+    }
+
+    // Update Mute state
+    if (next.voice && typeof next.voice.muted === 'boolean') {
+      aiService.setMuted(next.voice.muted);
+    }
+  }
+
+  // Ensure global audio agent is also muted (critical fix)
+  if (piperAgent && next.voice && typeof next.voice.muted === 'boolean') {
+    piperAgent.setMuted(next.voice.muted);
+  }
 }
 
 function handleAdapterFrame(message: AdapterFrameMessage) {
@@ -82,8 +100,14 @@ function handleAdapterFrame(message: AdapterFrameMessage) {
       language: {
         stt: 'es',
         tts: 'es'
-      }
+      },
+      analysisInterval: config.ai?.analysisInterval || 30
     }, piperAgent);
+
+    // Apply mute state immediately
+    if (config.voice && config.voice.muted) {
+      aiService.setMuted(true);
+    }
 
     aiService.initialize()
       .then(() => {
